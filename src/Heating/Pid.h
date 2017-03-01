@@ -130,7 +130,7 @@ private:
 	bool tuned;										// True if tuning was successful
 	uint8_t badTemperatureCount;					// Count of sequential dud readings
 
-	static_assert(sizeof(previousTemperaturesGood) * 8 >= NumPreviousTemperatures, "too few bits in previousTemperaturesGood");
+	//static_assert(sizeof(previousTemperaturesGood) * 8 >= NumPreviousTemperatures, "too few bits in previousTemperaturesGood");
 
 	// Variables used during heater tuning
 	static const size_t MaxTuningTempReadings = 128; // The maximum number of readings we keep. Must be an even number.

@@ -26,8 +26,8 @@ Licence: GPL
 #include <cfloat>
 #include <cstdarg>
 
-#include "ecv.h"
-#include "Core.h"
+//#include "ecv.h"
+//#include "Core.h"
 #include "Configuration.h"
 #include "Pins.h"
 #include "Libraries/General/StringRef.h"

@@ -259,11 +259,6 @@ bool Tool::AllHeatersAtHighTemperature(bool forExtrusion) const
 {
 	for (size_t heater = 0; heater < heaterCount; heater++)
 	{
-		const float temperature = reprap.GetHeat()->GetTemperature(heaters[heater]);
-		if (temperature < HOT_ENOUGH_TO_RETRACT || (temperature < HOT_ENOUGH_TO_EXTRUDE && forExtrusion))
-		{
-			return false;
-		}
 	}
 	return true;
 }
@@ -278,9 +273,6 @@ void Tool::Activate(Tool* currentlyActive)
 		}
 		for (size_t heater = 0; heater < heaterCount; heater++)
 		{
-			reprap.GetHeat()->SetActiveTemperature(heaters[heater], activeTemperatures[heater]);
-			reprap.GetHeat()->SetStandbyTemperature(heaters[heater], standbyTemperatures[heater]);
-			reprap.GetHeat()->Activate(heaters[heater]);
 		}
 		active = true;
 	}
@@ -292,8 +284,6 @@ void Tool::Standby()
 	{
 		for (size_t heater = 0; heater < heaterCount; heater++)
 		{
-			reprap.GetHeat()->SetStandbyTemperature(heaters[heater], standbyTemperatures[heater]);
-			reprap.GetHeat()->Standby(heaters[heater]);
 		}
 		active = false;
 	}
@@ -306,28 +296,9 @@ void Tool::SetVariables(const float* standby, const float* active)
 		if (active[heater] < NEARLY_ABS_ZERO && standby[heater] < NEARLY_ABS_ZERO)
 		{
 			// Temperatures close to ABS_ZERO turn off all associated heaters
-			reprap.GetHeat()->SwitchOff(heaters[heater]);
 		}
 		else
 		{
-			const float temperatureLimit = reprap.GetHeat()->GetTemperatureLimit(heaters[heater]);
-			const Tool * const currentTool = reprap.GetCurrentTool();
-			if (active[heater] < temperatureLimit)
-			{
-				activeTemperatures[heater] = active[heater];
-				if (currentTool == nullptr || currentTool == this)
-				{
-					reprap.GetHeat()->SetActiveTemperature(heaters[heater], activeTemperatures[heater]);
-				}
-			}
-			if (standby[heater] < temperatureLimit)
-			{
-				standbyTemperatures[heater] = standby[heater];
-				if (currentTool == nullptr || currentTool == this)
-				{
-					reprap.GetHeat()->SetStandbyTemperature(heaters[heater], standbyTemperatures[heater]);
-				}
-			}
 		}
 	}
 }
@@ -364,14 +335,6 @@ void Tool::UpdateExtruderAndHeaterCount(uint16_t &numExtruders, uint16_t &numHea
 		}
 	}
 
-	const int8_t bedHeater = reprap.GetHeat()->GetBedHeater();
-	for (size_t heater = 0; heater < heaterCount; heater++)
-	{
-		if (heaters[heater] != bedHeater && heaters[heater] >= numHeaters)
-		{
-			numHeaters = heaters[heater] + 1;
-		}
-	}
 }
 
 bool Tool::DisplayColdExtrudeWarning()

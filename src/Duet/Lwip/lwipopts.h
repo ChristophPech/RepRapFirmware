@@ -48,7 +48,7 @@
 #define __LWIPOPTS_H__
 
 /* Include user defined options first */
-#include "WMath.h"
+//#include "WMath.h"
 
 /* Uncomment the following line to enable LWIP debugging */
 //#define LWIP_DEBUG

@@ -3,7 +3,7 @@
 
 #include "RepRapFirmware.h"
 #include "TemperatureError.h"		// for result codes
-#include "SharedSpi.h"				// for sspi_device
+//#include "SharedSpi.h"				// for sspi_device
 
 class TemperatureSensor
 {
@@ -18,7 +18,7 @@ private:
 	TemperatureError DoSpiTransaction(const uint8_t dataOut[], size_t nbytes, uint32_t& rslt) const;
 	TemperatureError TryInitRtd() const;
 
-	sspi_device device;
+	//sspi_device device;
 	uint32_t lastReadingTime;
 	float lastTemperature;
 	TemperatureError lastResult;

@@ -477,7 +477,6 @@ void GCodes::Spin()
 				{
 					reprap.StandbyTool(tool->Number());
 				}
-				reprap.GetHeat()->SwitchOffAll();
 			}
 
 			// chrishamm 2014-18-10: Although RRP says M0 is supposed to turn off all drives and heaters,
@@ -681,78 +680,78 @@ void GCodes::StartNextGCode(GCodeBuffer& gb, StringRef& reply)
 	else if (&gb == httpGCode)
 	{
 		// Webserver
-		for (unsigned int i = 0; i < 16 && webserver->GCodeAvailable(WebSource::HTTP); ++i)
-		{
-			const char b = webserver->ReadGCode(WebSource::HTTP);
-			if (gb.Put(b))
-			{
-				// We have a complete gcode
-				if (gb.WritingFileDirectory() != nullptr)
-				{
-					WriteGCodeToFile(gb);
-					gb.SetFinished(true);
-				}
-				else
-				{
-					gb.SetFinished(ActOnCode(gb, reply));
-				}
-				break;
-			}
-		}
+// 		for (unsigned int i = 0; i < 16 && webserver->GCodeAvailable(WebSource::HTTP); ++i)
+// 		{
+// 			const char b = webserver->ReadGCode(WebSource::HTTP);
+// 			if (gb.Put(b))
+// 			{
+// 				// We have a complete gcode
+// 				if (gb.WritingFileDirectory() != nullptr)
+// 				{
+// 					WriteGCodeToFile(gb);
+// 					gb.SetFinished(true);
+// 				}
+// 				else
+// 				{
+// 					gb.SetFinished(ActOnCode(gb, reply));
+// 				}
+// 				break;
+// 			}
+// 		}
 	}
 	else if (&gb == telnetGCode)
 	{
-		// Telnet
-		for (unsigned int i = 0; i < GCODE_LENGTH && webserver->GCodeAvailable(WebSource::Telnet); ++i)
-		{
-			char b = webserver->ReadGCode(WebSource::Telnet);
-			if (gb.Put(b))
-			{
-				gb.SetFinished(ActOnCode(gb, reply));
-				break;
-			}
-		}
+// 		// Telnet
+// 		for (unsigned int i = 0; i < GCODE_LENGTH && webserver->GCodeAvailable(WebSource::Telnet); ++i)
+// 		{
+// 			char b = webserver->ReadGCode(WebSource::Telnet);
+// 			if (gb.Put(b))
+// 			{
+// 				gb.SetFinished(ActOnCode(gb, reply));
+// 				break;
+// 			}
+// 		}
 	}
 	else if (&gb == serialGCode)
 	{
 		// USB interface
-		for (unsigned int i = 0; i < 16 && platform->GCodeAvailable(SerialSource::USB); ++i)
-		{
-			const char b = platform->ReadFromSource(SerialSource::USB);
-			// Check the special case of uploading the reprap.htm file
-			if (gb.WritingFileDirectory() == platform->GetWebDir())
-			{
-				WriteHTMLToFile(gb, b);
-			}
-			else if (gb.Put(b))	// add char to buffer and test whether the gcode is complete
-			{
-				// We have a complete gcode
-				if (gb.WritingFileDirectory() != nullptr)
-				{
-					WriteGCodeToFile(gb);
-					gb.SetFinished(true);
-				}
-				else
-				{
-					gb.SetFinished(ActOnCode(gb, reply));
-				}
-				break;
-			}
-		}
+// 		for (unsigned int i = 0; i < 16 && platform->GCodeAvailable(SerialSource::USB); ++i)
+// 		{
+// 			const char b = platform->ReadFromSource(SerialSource::USB);
+// 			// Check the special case of uploading the reprap.htm file
+// 			if (gb.WritingFileDirectory() == platform->GetWebDir())
+// 			{
+// 				WriteHTMLToFile(gb, b);
+// 			}
+// 			else if (gb.Put(b))	// add char to buffer and test whether the gcode is complete
+// 			{
+// 				// We have a complete gcode
+// 				if (gb.WritingFileDirectory() != nullptr)
+// 				{
+// 					WriteGCodeToFile(gb);
+// 					gb.SetFinished(true);
+// 				}
+// 				else
+// 				{
+// 					gb.SetFinished(ActOnCode(gb, reply));
+// 				}
+// 				break;
+// 			}
+// 		}
 	}
 	else if (&gb == auxGCode)
 	{
 		// Aux serial port (typically PanelDue)
-		for (unsigned int i = 0; i < 16 && platform->GCodeAvailable(SerialSource::AUX); ++i)
-		{
-			char b = platform->ReadFromSource(SerialSource::AUX);
-			if (gb.Put(b))	// add char to buffer and test whether the gcode is complete
-			{
-				platform->SetAuxDetected();
-				gb.SetFinished(ActOnCode(gb, reply));
-				break;
-			}
-		}
+// 		for (unsigned int i = 0; i < 16 && platform->GCodeAvailable(SerialSource::AUX); ++i)
+// 		{
+// 			char b = platform->ReadFromSource(SerialSource::AUX);
+// 			if (gb.Put(b))	// add char to buffer and test whether the gcode is complete
+// 			{
+// 				platform->SetAuxDetected();
+// 				gb.SetFinished(ActOnCode(gb, reply));
+// 				break;
+// 			}
+// 		}
 	}
 }
 
@@ -793,7 +792,7 @@ void GCodes::DoFilePrint(GCodeBuffer& gb, StringRef& reply)
 				{
 					fd.Close();
 					UnlockAll(gb);
-					reprap.GetPrintMonitor()->StoppedPrint();
+					//reprap.GetPrintMonitor()->StoppedPrint();
 					if (platform->Emulating() == marlin)
 					{
 						// Pronterface expects a "Done printing" message
@@ -2358,7 +2357,7 @@ bool GCodes::SaveHeightMap(GCodeBuffer& gb, StringRef& reply) const
 		f->Close();
 		if (err)
 		{
-			platform->GetMassStorage()->Delete(platform->GetSysDir(), heightMapFileName);
+			//platform->GetMassStorage()->Delete(platform->GetSysDir(), heightMapFileName);
 			reply.catf("Failed to save height map to file %s", heightMapFileName);
 		}
 		else
@@ -2535,10 +2534,10 @@ void GCodes::QueueFileToPrint(const char* fileName)
 
 void GCodes::DeleteFile(const char* fileName)
 {
-	if (!platform->GetMassStorage()->Delete(platform->GetGCodeDir(), fileName))
-	{
-		platform->MessageF(GENERIC_MESSAGE, "Could not delete file \"%s\"\n", fileName);
-	}
+// 	if (!platform->GetMassStorage()->Delete(platform->GetGCodeDir(), fileName))
+// 	{
+// 		platform->MessageF(GENERIC_MESSAGE, "Could not delete file \"%s\"\n", fileName);
+// 	}
 }
 
 // Function to handle dwell delays. Returns true for dwell finished, false otherwise.
@@ -3157,29 +3156,6 @@ void GCodes::SetPidParameters(GCodeBuffer& gb, int heater, StringRef& reply)
 
 	if (heater >= 0 && heater < HEATERS)
 	{
-		const FopDt& model = reprap.GetHeat()->GetHeaterModel(heater);
-		M301PidParameters pp = model.GetM301PidParameters(false);
-		bool seen = false;
-		gb.TryGetFValue('P', pp.kP, seen);
-		gb.TryGetFValue('I', pp.kI, seen);
-		gb.TryGetFValue('D', pp.kD, seen);
-
-		if (seen)
-		{
-			reprap.GetHeat()->SetM301PidParameters(heater, pp);
-		}
-		else if (!model.UsePid())
-		{
-			reply.printf("Heater %d is in bang-bang mode", heater);
-		}
-		else if (model.ArePidParametersOverridden())
-		{
-			reply.printf("Heater %d P:%.1f I:%.3f D:%.1f", heater, pp.kP, pp.kI, pp.kD);
-		}
-		else
-		{
-			reply.printf("Heater %d uses model-derived PID parameters. Use M307 H%d to view them", heater, heater);
-		}
 	}
 }
 
@@ -3341,7 +3317,7 @@ void GCodes::CancelPrint()
 		fileBeingPrinted.Close();
 	}
 
-	reprap.GetPrintMonitor()->StoppedPrint();
+	//reprap.GetPrintMonitor()->StoppedPrint();
 }
 
 // Return true if all the heaters for the specified tool are at their set temperatures
@@ -3351,10 +3327,6 @@ bool GCodes::ToolHeatersAtSetTemperatures(const Tool *tool, bool waitWhenCooling
 	{
 		for (size_t i = 0; i < tool->HeaterCount(); ++i)
 		{
-			if (!reprap.GetHeat()->HeaterAtSetTemperature(tool->Heater(i), waitWhenCooling))
-			{
-				return false;
-			}
 		}
 	}
 	return true;
@@ -3446,49 +3418,11 @@ void GCodes::ListTriggers(StringRef reply, TriggerMask mask)
 // M38 (SHA1 hash of a file) implementation:
 bool GCodes::StartHash(const char* filename)
 {
-	// Get a FileStore object
-	fileBeingHashed = platform->GetFileStore(FS_PREFIX, filename, false);
-	if (fileBeingHashed == nullptr)
-	{
-		return false;
-	}
-
-	// Start hashing
-	SHA1Reset(&hash);
 	return true;
 }
 
 bool GCodes::AdvanceHash(StringRef &reply)
 {
-	// Read and process some more data from the file
-	uint32_t buf32[(FILE_BUFFER_SIZE + 3) / 4];
-	char *buffer = reinterpret_cast<char *>(buf32);
-
-	int bytesRead = fileBeingHashed->Read(buffer, FILE_BUFFER_SIZE);
-	if (bytesRead != -1)
-	{
-		SHA1Input(&hash, reinterpret_cast<const uint8_t *>(buffer), bytesRead);
-
-		if (bytesRead != FILE_BUFFER_SIZE)
-		{
-			// Calculate and report the final result
-			SHA1Result(&hash);
-			for(size_t i = 0; i < 5; i++)
-			{
-				reply.catf("%x", hash.Message_Digest[i]);
-			}
-
-			// Clean up again
-			fileBeingHashed->Close();
-			fileBeingHashed = nullptr;
-			return true;
-		}
-		return false;
-	}
-
-	// Something went wrong, we cannot read any more from the file
-	fileBeingHashed->Close();
-	fileBeingHashed = nullptr;
 	return true;
 }
 
@@ -3520,7 +3454,6 @@ bool GCodes::WriteConfigOverrideFile(StringRef& reply, const char *fileName) con
 	}
 	if (ok)
 	{
-		ok = reprap.GetHeat()->WriteModelParameters(f);
 	}
 	if (ok)
 	{
@@ -3533,7 +3466,7 @@ bool GCodes::WriteConfigOverrideFile(StringRef& reply, const char *fileName) con
 	if (!ok)
 	{
 		reply.printf("Failed to write file %s", fileName);
-		platform->GetMassStorage()->Delete(platform->GetSysDir(), fileName);
+		//platform->GetMassStorage()->Delete(platform->GetSysDir(), fileName);
 	}
 	return !ok;
 }
@@ -3541,33 +3474,6 @@ bool GCodes::WriteConfigOverrideFile(StringRef& reply, const char *fileName) con
 // Store a standard-format temperature report in 'reply'. This doesn't put a newline character at the end.
 void GCodes::GenerateTemperatureReport(StringRef& reply)
 {
-	const int8_t bedHeater = reprap.GetHeat()->GetBedHeater();
-	const int8_t chamberHeater = reprap.GetHeat()->GetChamberHeater();
-	reply.copy("T:");
-	for (int8_t heater = 0; heater < HEATERS; heater++)
-	{
-		if (heater != bedHeater && heater != chamberHeater)
-		{
-			Heat::HeaterStatus hs = reprap.GetHeat()->GetStatus(heater);
-			if (hs != Heat::HS_off && hs != Heat::HS_fault)
-			{
-				reply.catf("%.1f ", reprap.GetHeat()->GetTemperature(heater));
-			}
-		}
-	}
-	if (bedHeater >= 0)
-	{
-		reply.catf("B:%.1f", reprap.GetHeat()->GetTemperature(bedHeater));
-	}
-	else
-	{
-		// I'm not sure whether Pronterface etc. can handle a missing bed temperature, so return zero
-		reply.cat("B:0.0");
-	}
-	if (chamberHeater >= 0.0)
-	{
-		reply.catf(" C:%.1f", reprap.GetHeat()->GetTemperature(chamberHeater));
-	}
 }
 
 // Resource locking/unlocking

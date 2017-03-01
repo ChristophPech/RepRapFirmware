@@ -24,6 +24,7 @@ Licence: GPL
 #define CONFIGURATION_H
 
 #include <cstddef>			// for size_t
+#include <cstdint>
 
 // Other firmware that we might switch to be compatible with.
 

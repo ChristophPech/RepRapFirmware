@@ -190,13 +190,13 @@ static char scratchStringBuffer[170];		// this needs to be long enough to print 
 StringRef scratchString(scratchStringBuffer, ARRAY_SIZE(scratchStringBuffer));
 
 // For debug use
-void debugPrintf(const char* fmt, ...)
-{
-	va_list vargs;
-	va_start(vargs, fmt);
-	reprap.GetPlatform()->MessageF(DEBUG_MESSAGE, fmt, vargs);
-	va_end(vargs);
-}
+// void debugPrintf(const char* fmt, ...)
+// {
+// 	va_list vargs;
+// 	va_start(vargs, fmt);
+// 	reprap.GetPlatform()->MessageF(DEBUG_MESSAGE, fmt, vargs);
+// 	va_end(vargs);
+// }
 
 // String testing
 

@@ -3,15 +3,15 @@
 #include "Network.h"
 #include "Movement/Move.h"
 #include "GCodes/GCodes.h"
-#include "Heating/Heat.h"
+//#include "Heating/Heat.h"
 #include "Platform.h"
-#include "PrintMonitor.h"
+//#include "PrintMonitor.h"
 #include "Tool.h"
 #include "Webserver.h"
 #include "Version.h"
 
 #ifndef __RADDS__
-# include "sam/drivers/hsmci/hsmci.h"
+//# include "sam/drivers/hsmci/hsmci.h"
 #endif
 
 // Callback function from the hsmci driver, called while it is waiting for an SD card operation to complete
@@ -19,7 +19,7 @@ extern "C" void hsmciIdle()
 {
 	if (reprap.GetSpinningModule() != moduleNetwork)	// I don't think this should ever be false because the Network module doesn't do file access, but just in case...
 	{
-		reprap.GetNetwork()->Spin(false);
+		//reprap.GetNetwork()->Spin(false);
 	}
 }
 
@@ -33,17 +33,17 @@ RepRap::RepRap() : toolList(nullptr), currentTool(nullptr), lastToolWarningTime(
 {
 	OutputBuffer::Init();
 	platform = new Platform();
-	network = new Network(platform);
-	webserver = new Webserver(platform, network);
+	//network = new Network(platform);
+//	webserver = new Webserver(platform, network);
 	gCodes = new GCodes(platform, webserver);
 	move = new Move(platform, gCodes);
-	heat = new Heat(platform);
+	//heat = new Heat(platform);
 
 #if SUPPORT_ROLAND
 	roland = new Roland(platform);
 #endif
 
-	printMonitor = new PrintMonitor(platform, gCodes);
+	//printMonitor = new PrintMonitor(platform, gCodes);
 
 	SetPassword(DEFAULT_PASSWORD);
 	SetName(DEFAULT_NAME);
@@ -55,14 +55,14 @@ void RepRap::Init()
 	// All of the following init functions must execute reasonably quickly before the watchdog times us out
 	platform->Init();
 	gCodes->Init();
-	network->Init();
-	webserver->Init();
+	//network->Init();
+	//webserver->Init();
 	move->Init();
-	heat->Init();
+	//heat->Init();
 #if SUPPORT_ROLAND
 	roland->Init();
 #endif
-	printMonitor->Init();
+	//printMonitor->Init();
 	Platform::EnableWatchdog();		// do this after all init calls are made
 	active = true;					// must do this before we start the network, else the watchdog may time out
 
@@ -71,15 +71,6 @@ void RepRap::Init()
 	// Run the configuration file
 	const char *configFile = platform->GetConfigFile();
 	platform->Message(HOST_MESSAGE, "\nExecuting ");
-	if (platform->GetMassStorage()->FileExists(platform->GetSysDir(), configFile))
-	{
-		platform->MessageF(HOST_MESSAGE, "%s...", platform->GetConfigFile());
-	}
-	else
-	{
-		platform->MessageF(HOST_MESSAGE, "%s (no configuration file found)...", platform->GetDefaultFile());
-		configFile = platform->GetDefaultFile();
-	}
 
 	if (gCodes->RunConfigFile(configFile))
 	{
@@ -104,20 +95,10 @@ void RepRap::Init()
 		platform->Message(HOST_MESSAGE, "Network disabled.\n");
 	}
 #else
-	if (network->IsEnabled())
-	{
-		// Need to do this here, as the configuration GCodes may set IP address etc.
-		platform->Message(HOST_MESSAGE, "Starting network...\n");
-		network->Enable();
-	}
-	else
-	{
-		platform->Message(HOST_MESSAGE, "Network disabled.\n");
-	}
 #endif
 
 #ifndef __RADDS__
-	hsmci_set_idle_func(hsmciIdle);
+	//hsmci_set_idle_func(hsmciIdle);
 #endif
 	platform->MessageF(HOST_MESSAGE, "%s is up and running.\n", FIRMWARE_NAME);
 	fastLoop = FLT_MAX;
@@ -128,11 +109,11 @@ void RepRap::Init()
 void RepRap::Exit()
 {
 	active = false;
-	heat->Exit();
+	//heat->Exit();
 	move->Exit();
 	gCodes->Exit();
-	webserver->Exit();
-	network->Exit();
+	//webserver->Exit();
+	//network->Exit();
 	platform->Message(GENERIC_MESSAGE, "RepRap class exited.\n");
 	platform->Exit();
 }
@@ -148,11 +129,11 @@ void RepRap::Spin()
 
 	spinningModule = moduleNetwork;
 	ticksInSpinState = 0;
-	network->Spin(true);
+	//network->Spin(true);
 
 	spinningModule = moduleWebserver;
 	ticksInSpinState = 0;
-	webserver->Spin();
+	//webserver->Spin();
 
 	spinningModule = moduleGcodes;
 	ticksInSpinState = 0;
@@ -164,7 +145,7 @@ void RepRap::Spin()
 
 	spinningModule = moduleHeat;
 	ticksInSpinState = 0;
-	heat->Spin();
+	//heat->Spin();
 
 #if SUPPORT_ROLAND
 	spinningModule = moduleRoland;
@@ -174,20 +155,12 @@ void RepRap::Spin()
 
 	spinningModule = modulePrintMonitor;
 	ticksInSpinState = 0;
-	printMonitor->Spin();
+	//printMonitor->Spin();
 
 	spinningModule = noModule;
 	ticksInSpinState = 0;
 
 	// Check if we need to display a cold extrusion warning
-
-	for (Tool *t = toolList; t != nullptr; t = t->Next())
-	{
-		if (t->DisplayColdExtrudeWarning() && ToolWarningsAllowed())
-		{
-			platform->MessageF(GENERIC_MESSAGE, "Warning: Tool %d was not driven because its heater temperatures were not high enough or it has a heater fault\n", t->myNumber);
-		}
-	}
 
 	// Keep track of the loop time
 
@@ -217,43 +190,16 @@ void RepRap::Diagnostics(MessageType mtype)
 	OutputBuffer::Diagnostics(mtype);
 	platform->Diagnostics(mtype);				// this includes a call to our Timing() function
 	move->Diagnostics(mtype);
-	heat->Diagnostics(mtype);
+	//heat->Diagnostics(mtype);
 	gCodes->Diagnostics(mtype);
-	network->Diagnostics(mtype);
-	webserver->Diagnostics(mtype);
+	//network->Diagnostics(mtype);
+	//webserver->Diagnostics(mtype);
 }
 
 // Turn off the heaters, disable the motors, and deactivate the Heat and Move classes. Leave everything else working.
 void RepRap::EmergencyStop()
 {
 	stopped = true;
-
-	// Do not turn off ATX power here. If the nozzles are still hot, don't risk melting any surrounding parts...
-	//platform->SetAtxPower(false);
-
-	Tool* tool = toolList;
-	while (tool != nullptr)
-	{
-		tool->Standby();
-		tool = tool->Next();
-	}
-
-	heat->Exit();
-	for(size_t heater = 0; heater < HEATERS; heater++)
-	{
-		platform->SetHeater(heater, 0.0);
-	}
-
-	// We do this twice, to avoid an interrupt switching a drive back on. move->Exit() should prevent interrupts doing this.
-	for(int i = 0; i < 2; i++)
-	{
-		move->Exit();
-		for(size_t drive = 0; drive < DRIVES; drive++)
-		{
-			platform->SetMotorCurrent(drive, 0.0, false);
-			platform->DisableDrive(drive);
-		}
-	}
 }
 
 void RepRap::SetDebug(Module m, bool enable)
@@ -314,7 +260,7 @@ void RepRap::AddTool(Tool* tool)
 	}
 	tool->next = *t;
 	*t = tool;
-	tool->UpdateExtruderAndHeaterCount(activeExtruders, activeToolHeaters);
+//	tool->UpdateExtruderAndHeaterCount(activeExtruders, activeToolHeaters);
 	platform->UpdateConfiguredHeaters();
 }
 
@@ -335,7 +281,7 @@ void RepRap::DeleteTool(Tool* tool)
 	// Switch off any associated heater
 	for (size_t i = 0; i < tool->HeaterCount(); i++)
 	{
-		reprap.GetHeat()->SwitchOff(tool->Heater(i));
+//		reprap.GetHeat()->SwitchOff(tool->Heater(i));
 	}
 
 	// Purge any references to this tool
@@ -349,13 +295,13 @@ void RepRap::DeleteTool(Tool* tool)
 	}
 
 	// Delete it
-	Tool::Delete(tool);
+	//	Tool::Delete(tool);
 
 	// Update the number of active heaters and extruder drives
 	activeExtruders = activeToolHeaters = 0;
 	for (Tool *t = toolList; t != nullptr; t = t->Next())
 	{
-		t->UpdateExtruderAndHeaterCount(activeExtruders, activeToolHeaters);
+		//t->UpdateExtruderAndHeaterCount(activeExtruders, activeToolHeaters);
 	}
 	platform->UpdateConfiguredHeaters();
 }
@@ -518,443 +464,7 @@ void RepRap::Tick()
 // Type 3 is the same but instead of static parameters we report print estimation values.
 OutputBuffer *RepRap::GetStatusResponse(uint8_t type, ResponseSource source)
 {
-	// Need something to write to...
-	OutputBuffer *response;
-	if (!OutputBuffer::Allocate(response))
-	{
-		// Should never happen
-		return nullptr;
-	}
-
-	// Machine status
-	char ch = GetStatusCharacter();
-	response->printf("{\"status\":\"%c\",\"coords\":{", ch);
-
-	// Coordinates
-	const size_t numAxes = reprap.GetGCodes()->GetNumAxes();
-	{
-		float liveCoordinates[DRIVES + 1];
-#if SUPPORT_ROLAND
-		if (roland->Active())
-		{
-			roland->GetCurrentRolandPosition(liveCoordinates);
-		}
-		else
-#endif
-		{
-			move->LiveCoordinates(liveCoordinates, GetCurrentXAxes());
-		}
-
-		if (currentTool != nullptr)
-		{
-			const float *offset = currentTool->GetOffset();
-			for (size_t i = 0; i < numAxes; ++i)
-			{
-				liveCoordinates[i] += offset[i];
-			}
-		}
-
-		// Homed axes
-		response->cat("\"axesHomed\":");
-		ch = '[';
-		for (size_t axis = 0; axis < numAxes; ++axis)
-		{
-			response->catf("%c%d", ch, (gCodes->GetAxisIsHomed(axis)) ? 1 : 0);
-			ch = ',';
-		}
-
-		// Actual and theoretical extruder positions since power up, last G92 or last M23
-		response->catf("],\"extr\":");		// announce actual extruder positions
-		ch = '[';
-		for (size_t extruder = 0; extruder < GetExtrudersInUse(); extruder++)
-		{
-			response->catf("%c%.1f", ch, liveCoordinates[numAxes + extruder]);
-			ch = ',';
-		}
-		if (ch == '[')
-		{
-			response->cat("[");
-		}
-
-		// XYZ positions
-		response->cat("],\"xyz\":");
-		if (!gCodes->AllAxesAreHomed() && move->IsDeltaMode())
-		{
-			// If in Delta mode, skip these coordinates if some axes are not homed
-			response->cat("[0.00,0.00,0.00");
-		}
-		else
-		{
-			// On Cartesian printers, the live coordinates are (usually) valid
-			ch = '[';
-			for (size_t axis = 0; axis < numAxes; axis++)
-			{
-				response->catf("%c%.2f", ch, liveCoordinates[axis]);
-				ch = ',';
-			}
-		}
-	}
-
-	// Current tool number
-	const int toolNumber = (currentTool == nullptr) ? -1 : currentTool->Number();
-	response->catf("]},\"currentTool\":%d", toolNumber);
-
-	// Output - only reported once
-	{
-		bool sendBeep = (beepDuration != 0 && beepFrequency != 0);
-		bool sendMessage = (message[0] != 0);
-		if (sendBeep || sendMessage)
-		{
-			response->cat(",\"output\":{");
-
-			// Report beep values
-			if (sendBeep)
-			{
-				response->catf("\"beepDuration\":%d,\"beepFrequency\":%d", beepDuration, beepFrequency);
-				if (sendMessage)
-				{
-					response->cat(",");
-				}
-				beepFrequency = beepDuration = 0;
-			}
-
-			// Report message
-			if (sendMessage)
-			{
-				response->cat("\"message\":");
-				response->EncodeString(message, ARRAY_SIZE(message), false);
-				message[0] = 0;
-			}
-			response->cat("}");
-		}
-	}
-
-	// Parameters
-	{
-		// ATX power
-		response->catf(",\"params\":{\"atxPower\":%d", platform->AtxPower() ? 1 : 0);
-
-		// Cooling fan value
-		response->cat(",\"fanPercent\":");
-		ch = '[';
-		for(size_t i = 0; i < NUM_FANS; i++)
-		{
-			response->catf("%c%.2f", ch, platform->GetFanValue(i) * 100.0);
-			ch = ',';
-		}
-
-		// Speed and Extrusion factors
-		response->catf("],\"speedFactor\":%.2f,\"extrFactors\":", gCodes->GetSpeedFactor() * 100.0);
-		ch = '[';
-		for (size_t extruder = 0; extruder < GetExtrudersInUse(); extruder++)
-		{
-			response->catf("%c%.2f", ch, gCodes->GetExtrusionFactor(extruder) * 100.0);
-			ch = ',';
-		}
-		response->cat((ch == '[') ? "[]" : "]");
-		response->catf(",\"babystep\":%.03f}", gCodes->GetBabyStepOffset());
-	}
-
-	// G-code reply sequence for webserver (seqence number for AUX is handled later)
-	if (source == ResponseSource::HTTP)
-	{
-		response->catf(",\"seq\":%d", webserver->GetReplySeq());
-
-		// There currently appears to be no need for this one, so skip it
-		//response->catf(",\"buff\":%u", webserver->GetGCodeBufferSpace(WebSource::HTTP));
-	}
-
-	/* Sensors */
-	{
-		response->cat(",\"sensors\":{");
-
-		// Probe
-		const int v0 = platform->GetZProbeReading();
-		int v1, v2;
-		switch (platform->GetZProbeSecondaryValues(v1, v2))
-		{
-			case 1:
-				response->catf("\"probeValue\":%d,\"probeSecondary\":[%d]", v0, v1);
-				break;
-			case 2:
-				response->catf("\"probeValue\":%d,\"probeSecondary\":[%d,%d]", v0, v1, v2);
-				break;
-			default:
-				response->catf("\"probeValue\":%d", v0);
-				break;
-		}
-
-		// Fan RPM
-		response->catf(",\"fanRPM\":%d}", static_cast<unsigned int>(platform->GetFanRPM()));
-	}
-
-	/* Temperatures */
-	{
-		response->cat(",\"temps\":{");
-
-		/* Bed */
-		const int8_t bedHeater = heat->GetBedHeater();
-		if (bedHeater != -1)
-		{
-			response->catf("\"bed\":{\"current\":%.1f,\"active\":%.1f,\"state\":%d},",
-					heat->GetTemperature(bedHeater), heat->GetActiveTemperature(bedHeater),
-					heat->GetStatus(bedHeater));
-		}
-
-		/* Chamber */
-		const int8_t chamberHeater = heat->GetChamberHeater();
-		if (chamberHeater != -1)
-		{
-			response->catf("\"chamber\":{\"current\":%.1f,", heat->GetTemperature(chamberHeater));
-			response->catf("\"active\":%.1f,", heat->GetActiveTemperature(chamberHeater));
-			response->catf("\"state\":%d},", static_cast<int>(heat->GetStatus(chamberHeater)));
-		}
-
-		/* Heads */
-		{
-			response->cat("\"heads\":{\"current\":");
-
-			// Current temperatures
-			ch = '[';
-			for (size_t heater = DefaultE0Heater; heater < GetToolHeatersInUse(); heater++)
-			{
-				response->catf("%c%.1f", ch, heat->GetTemperature(heater));
-				ch = ',';
-			}
-			response->cat((ch == '[') ? "[]" : "]");
-
-			// Active temperatures
-			response->catf(",\"active\":");
-			ch = '[';
-			for (size_t heater = DefaultE0Heater; heater < GetToolHeatersInUse(); heater++)
-			{
-				response->catf("%c%.1f", ch, heat->GetActiveTemperature(heater));
-				ch = ',';
-			}
-			response->cat((ch == '[') ? "[]" : "]");
-
-			// Standby temperatures
-			response->catf(",\"standby\":");
-			ch = '[';
-			for (size_t heater = DefaultE0Heater; heater < GetToolHeatersInUse(); heater++)
-			{
-				response->catf("%c%.1f", ch, heat->GetStandbyTemperature(heater));
-				ch = ',';
-			}
-			response->cat((ch == '[') ? "[]" : "]");
-
-			// Heater statuses (0=off, 1=standby, 2=active, 3=fault)
-			response->cat(",\"state\":");
-			ch = '[';
-			for (size_t heater = DefaultE0Heater; heater < GetToolHeatersInUse(); heater++)
-			{
-				response->catf("%c%d", ch, static_cast<int>(heat->GetStatus(heater)));
-				ch = ',';
-			}
-			response->cat((ch == '[') ? "[]" : "]");
-		}
-		response->cat("}}");
-	}
-
-	// Time since last reset
-	response->catf(",\"time\":%.1f", platform->Time());
-
-	/* Extended Status Response */
-	if (type == 2)
-	{
-		// Cold Extrude/Retract
-		response->catf(",\"coldExtrudeTemp\":%1.f", heat->ColdExtrude() ? 0 : HOT_ENOUGH_TO_EXTRUDE);
-		response->catf(",\"coldRetractTemp\":%1.f", heat->ColdExtrude() ? 0 : HOT_ENOUGH_TO_RETRACT);
-
-		// Maximum hotend temperature - DWC just wants the highest one
-		response->catf(",\"tempLimit\":%1.f", heat->GetHighestTemperatureLimit());
-
-		// Endstops
-		uint16_t endstops = 0;
-		for(size_t drive = 0; drive < DRIVES; drive++)
-		{
-			EndStopHit stopped = platform->Stopped(drive);
-			if (stopped == EndStopHit::highHit || stopped == EndStopHit::lowHit)
-			{
-				endstops |= (1 << drive);
-			}
-		}
-		response->catf(",\"endstops\":%d", endstops);
-
-		// Firmware name, machine geometry and number of axes
-		response->catf(",\"firmwareName\":\"%s\",\"geometry\":\"%s\",\"axes\":%u", FIRMWARE_NAME, move->GetGeometryString(), numAxes);
-
-		// Total and mounted volumes
-		size_t mountedCards = 0;
-		for(size_t i = 0; i < NumSdCards; i++)
-		{
-			if (platform->GetMassStorage()->IsDriveMounted(i))
-			{
-				mountedCards |= (1 << i);
-			}
-		}
-		response->catf(",\"volumes\":%u,\"mountedVolumes\":%u", NumSdCards, mountedCards);
-
-		// Machine name
-		response->cat(",\"name\":");
-		response->EncodeString(myName, ARRAY_SIZE(myName), false);
-
-		/* Probe */
-		{
-			const ZProbeParameters probeParams = platform->GetCurrentZProbeParameters();
-
-			// Trigger threshold
-			response->catf(",\"probe\":{\"threshold\":%d", probeParams.adcValue);
-
-			// Trigger height
-			response->catf(",\"height\":%.2f", probeParams.height);
-
-			// Type
-			response->catf(",\"type\":%d}", platform->GetZProbeType());
-		}
-
-		/* Tool Mapping */
-		{
-			response->cat(",\"tools\":[");
-			for(Tool *tool = toolList; tool != nullptr; tool = tool->Next())
-			{
-				// Heaters
-				response->catf("{\"number\":%d,\"heaters\":[", tool->Number());
-				for(size_t heater=0; heater<tool->HeaterCount(); heater++)
-				{
-					response->catf("%d", tool->Heater(heater));
-					if (heater + 1 < tool->HeaterCount())
-					{
-						response->cat(",");
-					}
-				}
-
-				// Extruder drives
-				response->cat("],\"drives\":[");
-				for(size_t drive=0; drive<tool->DriveCount(); drive++)
-				{
-					response->catf("%d", tool->Drive(drive));
-					if (drive + 1 < tool->DriveCount())
-					{
-						response->cat(",");
-					}
-				}
-
-				// Axis mapping. Currently we only map the X axis, but we return an array of arrays to allow for mapping other axes in future.
-				response->cat("],\"axisMap\":[[");
-				bool first = true;
-				for (size_t xi = 0; xi < MAX_AXES; ++xi)
-				{
-					if ((tool->GetXAxisMap() & (1u << xi)) != 0)
-					{
-						if (first)
-						{
-							first = false;
-						}
-						else
-						{
-							response->cat(",");
-						}
-						response->catf("%u", xi);
-					}
-				}
-
-				// Do we have any more tools?
-				if (tool->Next() != nullptr)
-				{
-					response->cat("]]},");
-				}
-				else
-				{
-					response->cat("]]}");
-				}
-			}
-			response->cat("]");
-		}
-
-		// MCU temperatures
-#ifndef __RADDS__
-		{
-			float minT, currT, maxT;
-			platform->GetMcuTemperatures(minT, currT, maxT);
-			response->catf(",\"mcutemp\":{\"min\":%.1f,\"cur\":%.1f,\"max\":%.1f}", minT, currT, maxT);
-		}
-#endif
-
-#ifdef DUET_NG
-		// Power in voltages
-		{
-			float minV, currV, maxV;
-			platform->GetPowerVoltages(minV, currV, maxV);
-			response->catf(",\"vin\":{\"min\":%.1f,\"cur\":%.1f,\"max\":%.1f}", minV, currV, maxV);
-		}
-#endif
-	}
-	else if (type == 3)
-	{
-		// Current Layer
-		response->catf(",\"currentLayer\":%d", printMonitor->GetCurrentLayer());
-
-		// Current Layer Time
-		response->catf(",\"currentLayerTime\":%.1f", printMonitor->GetCurrentLayerTime());
-
-		// Raw Extruder Positions
-		response->cat(",\"extrRaw\":");
-		ch = '[';
-		for (size_t extruder = 0; extruder < GetExtrudersInUse(); extruder++)		// loop through extruders
-		{
-			response->catf("%c%.1f", ch, gCodes->GetRawExtruderTotalByDrive(extruder));
-			ch = ',';
-		}
-		if (ch == '[')
-		{
-			response->cat(ch);		// no extruders
-		}
-
-		// Fraction of file printed
-		response->catf("],\"fractionPrinted\":%.1f", (printMonitor->IsPrinting()) ? (gCodes->FractionOfFilePrinted() * 100.0) : 0.0);
-
-		// First Layer Duration
-		response->catf(",\"firstLayerDuration\":%.1f", printMonitor->GetFirstLayerDuration());
-
-		// First Layer Height
-		// NB: This shouldn't be needed any more, but leave it here for the case that the file-based first-layer detection fails
-		response->catf(",\"firstLayerHeight\":%.2f", printMonitor->GetFirstLayerHeight());
-
-		// Print Duration
-		response->catf(",\"printDuration\":%.1f", printMonitor->GetPrintDuration());
-
-		// Warm-Up Time
-		response->catf(",\"warmUpDuration\":%.1f", printMonitor->GetWarmUpDuration());
-
-		/* Print Time Estimations */
-		{
-			// Based on file progress
-			response->catf(",\"timesLeft\":{\"file\":%.1f", printMonitor->EstimateTimeLeft(fileBased));
-
-			// Based on filament usage
-			response->catf(",\"filament\":%.1f", printMonitor->EstimateTimeLeft(filamentBased));
-
-			// Based on layers
-			response->catf(",\"layer\":%.1f}", printMonitor->EstimateTimeLeft(layerBased));
-		}
-	}
-
-	if (source == ResponseSource::AUX)
-	{
-		OutputBuffer *reply = platform->GetAuxGCodeReply();
-		if (response != nullptr)
-		{
-			// Send the response to the last command. Do this last
-			response->catf(",\"seq\":%u,\"resp\":", platform->GetAuxSeq());			// send the response sequence number
-
-			// Send the JSON response
-			response->EncodeReply(reply, true);										// also releases the OutputBuffer chain
-		}
-	}
-	response->cat("}");
-
-	return response;
+	return nullptr;
 }
 
 OutputBuffer *RepRap::GetConfigResponse()
@@ -1056,227 +566,7 @@ OutputBuffer *RepRap::GetConfigResponse()
 // 'seq' is the response sequence number, if it is not -1 and we have a different sequence number then we send the gcode response
 OutputBuffer *RepRap::GetLegacyStatusResponse(uint8_t type, int seq)
 {
-	// Need something to write to...
-	OutputBuffer *response;
-	if (!OutputBuffer::Allocate(response))
-	{
-		// Should never happen
-		return nullptr;
-	}
-
-	// Send the status. Note that 'S' has always meant that the machine is halted in this version of the status response, so we use A for pAused.
-	char ch = GetStatusCharacter();
-	if (ch == 'S')			// if paused then send 'A'
-	{
-		ch = 'A';
-	}
-	else if (ch == 'H')		// if halted then send 'S'
-	{
-		ch = 'S';
-	}
-	response->printf("{\"status\":\"%c\",\"heaters\":", ch);
-
-	// Send the heater actual temperatures
-	const int8_t bedHeater = heat->GetBedHeater();
-	if (bedHeater != -1)
-	{
-		ch = ',';
-		response->catf("[%.1f", heat->GetTemperature(bedHeater));
-	}
-	else
-	{
-		ch = '[';
-	}
-	for (size_t heater = DefaultE0Heater; heater < GetToolHeatersInUse(); heater++)
-	{
-		response->catf("%c%.1f", ch, heat->GetTemperature(heater));
-		ch = ',';
-	}
-	response->cat((ch == '[') ? "[]" : "]");
-
-	// Send the heater active temperatures
-	response->catf(",\"active\":");
-	if (heat->GetBedHeater() != -1)
-	{
-		ch = ',';
-		response->catf("[%.1f", heat->GetActiveTemperature(heat->GetBedHeater()));
-	}
-	else
-	{
-		ch = '[';
-	}
-	for (size_t heater = DefaultE0Heater; heater < GetToolHeatersInUse(); heater++)
-	{
-		response->catf("%c%.1f", ch, heat->GetActiveTemperature(heater));
-		ch = ',';
-	}
-	response->cat((ch == '[') ? "[]" : "]");
-
-	// Send the heater standby temperatures
-	response->catf(",\"standby\":");
-	if (bedHeater != -1)
-	{
-		ch = ',';
-		response->catf("[%.1f", heat->GetStandbyTemperature(bedHeater));
-	}
-	else
-	{
-		ch = '[';
-	}
-	for (size_t heater = DefaultE0Heater; heater < GetToolHeatersInUse(); heater++)
-	{
-		response->catf("%c%.1f", ch, heat->GetStandbyTemperature(heater));
-		ch = ',';
-	}
-	response->cat((ch == '[') ? "[]" : "]");
-
-	// Send the heater statuses (0=off, 1=standby, 2=active, 3 = fault)
-	response->cat(",\"hstat\":");
-	if (bedHeater != -1)
-	{
-		ch = ',';
-		response->catf("[%d", static_cast<int>(heat->GetStatus(bedHeater)));
-	}
-	else
-	{
-		ch = '[';
-	}
-	for (size_t heater = DefaultE0Heater; heater < GetToolHeatersInUse(); heater++)
-	{
-		response->catf("%c%d", ch, static_cast<int>(heat->GetStatus(heater)));
-		ch = ',';
-	}
-	response->cat((ch == '[') ? "[]" : "]");
-
-	// Send XYZ positions
-	const size_t numAxes = reprap.GetGCodes()->GetNumAxes();
-	float liveCoordinates[DRIVES];
-	reprap.GetMove()->LiveCoordinates(liveCoordinates, GetCurrentXAxes());
-	const Tool* const currentTool = reprap.GetCurrentTool();
-	if (currentTool != nullptr)
-	{
-		const float *offset = currentTool->GetOffset();
-		for (size_t i = 0; i < numAxes; ++i)
-		{
-			liveCoordinates[i] += offset[i];
-		}
-	}
-	response->catf(",\"pos\":");		// announce the XYZ position
-	ch = '[';
-	for (size_t drive = 0; drive < numAxes; drive++)
-	{
-		response->catf("%c%.2f", ch, liveCoordinates[drive]);
-		ch = ',';
-	}
-
-	// Send extruder total extrusion since power up, last G92 or last M23
-	response->cat("],\"extr\":");		// announce the extruder positions
-	ch = '[';
-	for (size_t drive = 0; drive < reprap.GetExtrudersInUse(); drive++)		// loop through extruders
-	{
-		response->catf("%c%.1f", ch, gCodes->GetRawExtruderPosition(drive));
-		ch = ',';
-	}
-	response->cat((ch == ']') ? "[]" : "]");
-
-	// Send the speed and extruder override factors
-	response->catf(",\"sfactor\":%.2f,\"efactor\":", gCodes->GetSpeedFactor() * 100.0);
-	ch = '[';
-	for (size_t i = 0; i < reprap.GetExtrudersInUse(); ++i)
-	{
-		response->catf("%c%.2f", ch, gCodes->GetExtrusionFactor(i) * 100.0);
-		ch = ',';
-	}
-	response->cat((ch == '[') ? "[]" : "]");
-
-	// Send the baby stepping offset
-	response->catf(",\"babystep\":%.03f", gCodes->GetBabyStepOffset());
-
-	// Send the current tool number
-	const int toolNumber = (currentTool == nullptr) ? 0 : currentTool->Number();
-	response->catf(",\"tool\":%d", toolNumber);
-
-	// Send the Z probe value
-	const int v0 = platform->GetZProbeReading();
-	int v1, v2;
-	switch (platform->GetZProbeSecondaryValues(v1, v2))
-	{
-	case 1:
-		response->catf(",\"probe\":\"%d (%d)\"", v0, v1);
-		break;
-	case 2:
-		response->catf(",\"probe\":\"%d (%d, %d)\"", v0, v1, v2);
-		break;
-	default:
-		response->catf(",\"probe\":\"%d\"", v0);
-		break;
-	}
-
-	// Send the fan settings, for PanelDue firmware 1.13 and later
-	response->catf(",\"fanPercent\":");
-	ch = '[';
-	for (size_t i = 0; i < NUM_FANS; ++i)
-	{
-		response->catf("%c%.02f", ch, platform->GetFanValue(i) * 100.0);
-		ch = ',';
-	}
-
-	// Send fan RPM value (we only support one)
-	response->catf("],\"fanRPM\":%u", static_cast<unsigned int>(platform->GetFanRPM()));
-
-	// Send the home state. To keep the messages short, we send 1 for homed and 0 for not homed, instead of true and false.
-	response->cat(",\"homed\":");
-	ch = '[';
-	for (size_t axis = 0; axis < numAxes; ++axis)
-	{
-		response->catf("%c%d", ch, (gCodes->GetAxisIsHomed(axis)) ? 1 : 0);
-		ch = ',';
-	}
-	response->cat(']');
-
-	if (printMonitor->IsPrinting())
-	{
-		// Send the fraction printed
-		response->catf(",\"fraction_printed\":%.4f", max<float>(0.0, gCodes->FractionOfFilePrinted()));
-	}
-
-	// Short messages are now pushed directly to PanelDue, so don't include them here as well
-	// We no longer send the amount of http buffer space here because the web interface doesn't use these formns of status response
-
-	if (type == 2)
-	{
-		if (printMonitor->IsPrinting())
-		{
-			// Send estimated times left based on file progress, filament usage, and layers
-			response->catf(",\"timesLeft\":[%.1f,%.1f,%.1f]",
-					printMonitor->EstimateTimeLeft(fileBased),
-					printMonitor->EstimateTimeLeft(filamentBased),
-					printMonitor->EstimateTimeLeft(layerBased));
-		}
-	}
-	else if (type == 3)
-	{
-		// Add the static fields
-		response->catf(",\"geometry\":\"%s\",\"axes\":%u,\"volumes\":%u,\"numTools\":%u,\"myName\":",
-						move->GetGeometryString(), numAxes, NumSdCards, GetNumberOfContiguousTools());
-		response->EncodeString(myName, ARRAY_SIZE(myName), false);
-		response->cat(",\"firmwareName\":");
-		response->EncodeString(FIRMWARE_NAME, strlen(FIRMWARE_NAME), false);
-	}
-
-	const int auxSeq = (int)platform->GetAuxSeq();
-	if (type < 2 || (seq != -1 && auxSeq != seq))
-	{
-
-		// Send the response to the last command. Do this last because it can be long and may need to be truncated.
-		response->catf(",\"seq\":%d,\"resp\":", auxSeq);					// send the response sequence number
-
-		// Send the JSON response
-		response->EncodeReply(platform->GetAuxGCodeReply(), true);			// also releases the OutputBuffer chain
-	}
-
-	response->cat("}");
-	return response;
+	return nullptr;
 }
 
 // Copy some parameter text, stopping at the first control character or when the destination buffer is full, and removing trailing spaces
@@ -1299,147 +589,14 @@ void RepRap::CopyParameterText(const char* src, char *dst, size_t length)
 // If flagDirs is true then we prefix each directory with a * character.
 OutputBuffer *RepRap::GetFilesResponse(const char *dir, bool flagsDirs)
 {
-	// Need something to write to...
-	OutputBuffer *response;
-	if (!OutputBuffer::Allocate(response))
-	{
-		return nullptr;
-	}
-
-	response->copy("{\"dir\":");
-	response->EncodeString(dir, strlen(dir), false);
-	response->cat(",\"files\":[");
-	unsigned int err;
-
-	if (!platform->GetMassStorage()->CheckDriveMounted(dir))
-	{
-		err = 1;
-	}
-	else
-	{
-		err = 0;
-		FileInfo fileInfo;
-		bool firstFile = true;
-		bool gotFile = platform->GetMassStorage()->FindFirst(dir, fileInfo);	// TODO error handling here
-
-		size_t bytesLeft = OutputBuffer::GetBytesLeft(response);	// don't write more bytes than we can
-		char filename[FILENAME_LENGTH];
-		filename[0] = '*';
-		const char *fname;
-
-		while (gotFile)
-		{
-			if (fileInfo.fileName[0] != '.')						// ignore Mac resource files and Linux hidden files
-			{
-				// Get the long filename if possible
-				if (flagsDirs && fileInfo.isDirectory)
-				{
-					strncpy(filename + sizeof(char), fileInfo.fileName, FILENAME_LENGTH - 1);
-					filename[FILENAME_LENGTH - 1] = 0;
-					fname = filename;
-				}
-				else
-				{
-					fname = fileInfo.fileName;
-				}
-
-				// Make sure we can end this response properly
-				if (bytesLeft < strlen(fname) * 2 + 4)
-				{
-					// No more space available - stop here
-					break;
-				}
-
-				// Write separator and filename
-				if (!firstFile)
-				{
-					bytesLeft -= response->cat(',');
-				}
-				bytesLeft -= response->EncodeString(fname, FILENAME_LENGTH, false);
-
-				firstFile = false;
-			}
-			gotFile = platform->GetMassStorage()->FindNext(fileInfo);	// TODO error handling here
-		}
-	}
-	response->catf("],\"err\":%u}", err);
-	return response;
+	return nullptr;
 }
 
 // Get a JSON-style filelist including file types and sizes
 OutputBuffer *RepRap::GetFilelistResponse(const char *dir)
 {
-	// Need something to write to...
-	OutputBuffer *response;
-	if (!OutputBuffer::Allocate(response))
-	{
-		return nullptr;
-	}
+	return nullptr;
 
-	// If the requested volume is not mounted, report an error
-	if (!platform->GetMassStorage()->CheckDriveMounted(dir))
-	{
-		response->copy("{\"err\":1}");
-		return response;
-	}
-
-	// Check if the directory exists
-	if (!platform->GetMassStorage()->DirectoryExists(dir))
-	{
-		response->copy("{\"err\":2}");
-		return response;
-	}
-
-	response->copy("{\"dir\":");
-	response->EncodeString(dir, strlen(dir), false);
-	response->cat(",\"files\":[");
-
-	FileInfo fileInfo;
-	bool firstFile = true;
-	bool gotFile = platform->GetMassStorage()->FindFirst(dir, fileInfo);
-	size_t bytesLeft = OutputBuffer::GetBytesLeft(response);	// don't write more bytes than we can
-
-	while (gotFile)
-	{
-		if (fileInfo.fileName[0] != '.')			// ignore Mac resource files and Linux hidden files
-		{
-			// Make sure we can end this response properly
-			if (bytesLeft < strlen(fileInfo.fileName) + 70)
-			{
-				// No more space available - stop here
-				break;
-			}
-
-			// Write delimiter
-			if (!firstFile)
-			{
-				bytesLeft -= response->cat(',');
-			}
-			firstFile = false;
-
-			// Write another file entry
-			bytesLeft -= response->catf("{\"type\":\"%c\",\"name\":", fileInfo.isDirectory ? 'd' : 'f');
-			bytesLeft -= response->EncodeString(fileInfo.fileName, FILENAME_LENGTH, false);
-			bytesLeft -= response->catf(",\"size\":%u", fileInfo.size);
-
-			const struct tm * const timeInfo = gmtime(&fileInfo.lastModified);
-			if (timeInfo->tm_year <= /*19*/80)
-			{
-				// Don't send the last modified date if it is invalid
-				bytesLeft -= response->cat('}');
-			}
-			else
-			{
-				bytesLeft -= response->catf(",\"date\":\"%04u-%02u-%02uT%02u:%02u:%02u\"}",
-						timeInfo->tm_year + 1900, timeInfo->tm_mon + 1, timeInfo->tm_mday,
-						timeInfo->tm_hour, timeInfo->tm_min, timeInfo->tm_sec);
-			}
-		}
-		gotFile = platform->GetMassStorage()->FindNext(fileInfo);
-	}
-	response->cat("]}");
-
-	return response;
 }
 
 // Send a beep. We send it to both PanelDue and the web interface.
@@ -1477,7 +634,7 @@ char RepRap::GetStatusCharacter() const
 			: (gCodes->IsResuming()) 									? 'R'	// Resuming
 			: (gCodes->IsDoingToolChange())								? 'T'	// Running tool change macros
 			: (gCodes->IsPaused()) 										? 'S'	// Paused / Stopped
-			: (printMonitor->IsPrinting())								? 'P'	// Printing
+//			: (printMonitor->IsPrinting())								? 'P'	// Printing
 			: (gCodes->DoingFileMacro() || !move->NoLiveMovement()) 	? 'B'	// Busy
 			: 'I';																// Idle
 }
@@ -1505,11 +662,7 @@ const char *RepRap::GetName() const
 
 void RepRap::SetName(const char* nm)
 {
-	// Users sometimes put a tab character between the machine name and the comment, so allow for this
-	CopyParameterText(nm, myName, ARRAY_SIZE(myName));
 
-	// Set new DHCP hostname
-	network->SetHostname(myName);
 }
 
 // Given that we want to extrude/retract the specified extruder drives, check if they are allowed.
@@ -1517,63 +670,24 @@ void RepRap::SetName(const char* nm)
 // This may be called by an ISR!
 unsigned int RepRap::GetProhibitedExtruderMovements(unsigned int extrusions, unsigned int retractions)
 {
-	if (GetHeat()->ColdExtrude())
-	{
-		return 0;
-	}
-
-	Tool *tool = currentTool;
-	if (tool == nullptr)
-	{
-		// This should not happen, but if on tool is selected then don't allow any extruder movement
-		return extrusions | retractions;
-	}
-
-	unsigned int result = 0;
-	for (size_t driveNum = 0; driveNum < tool->DriveCount(); driveNum++)
-	{
-		const unsigned int extruderDrive = (unsigned int)(tool->Drive(driveNum));
-		const unsigned int mask = 1 << extruderDrive;
-		if (extrusions & mask)
-		{
-			if (!tool->ToolCanDrive(true))
-			{
-				result |= mask;
-			}
-		}
-		else if (retractions & mask)
-		{
-			if (!tool->ToolCanDrive(false))
-			{
-				result |= mask;
-			}
-		}
-	}
-
-	return result;
+	
+	return -1;
 }
 
 void RepRap::FlagTemperatureFault(int8_t dudHeater)
 {
-	if (toolList != nullptr)
-	{
-		toolList->FlagTemperatureFault(dudHeater);
-	}
+
 }
 
 void RepRap::ClearTemperatureFault(int8_t wasDudHeater)
 {
-	reprap.GetHeat()->ResetFault(wasDudHeater);
-	if (toolList != nullptr)
-	{
-		toolList->ClearTemperatureFault(wasDudHeater);
-	}
+
 }
 
 // Get the current axes used as X axes
 uint32_t RepRap::GetCurrentXAxes() const
 {
-	return (currentTool == nullptr) ? DefaultXAxisMapping : currentTool->GetXAxisMap();
+	return 0;
 }
 
 // Helper function for diagnostic tests in Platform.cpp, to cause a deliberate divide-by-zero

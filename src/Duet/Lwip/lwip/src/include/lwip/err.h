@@ -32,8 +32,9 @@
 #ifndef __LWIP_ERR_H__
 #define __LWIP_ERR_H__
 
-#include "lwip/src/include/lwip/opt.h"
-#include "lwip/src/include/lwip/arch.h"
+//#include "lwip/src/include/lwip/opt.h"
+//#include "lwip/src/include/lwip/arch.h"
+typedef char* s8_t;
 
 #ifdef __cplusplus
 extern "C" {

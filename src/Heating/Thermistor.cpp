@@ -18,7 +18,7 @@
 // Create an instance with default values
 Thermistor::Thermistor() : adcLowOffset(0), adcHighOffset(0)
 {
-	SetParameters(EXT_R25, EXT_BETA, EXT_SHC, THERMISTOR_SERIES_RS);
+//	SetParameters(EXT_R25, EXT_BETA, EXT_SHC, THERMISTOR_SERIES_RS);
 }
 
 // Initialise the instance

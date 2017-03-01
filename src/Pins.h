@@ -12,6 +12,8 @@
 #  endif
 # elif defined(__SAM4E8E__)
 #  define PLATFORM DuetNG
+# elif defined(_WIN32)
+#  define PLATFORM Win32
 # else
 #  error Unknown platform
 # endif
