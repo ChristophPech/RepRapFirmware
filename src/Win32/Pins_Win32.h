@@ -5,6 +5,8 @@
 #include <inttypes.h>
 using namespace std;
 
+#define private public //most evil define
+
 #pragma warning (disable:4305)
 #pragma warning (disable:4244)
 #pragma warning (disable:4838)

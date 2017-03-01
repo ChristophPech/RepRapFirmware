@@ -701,16 +701,16 @@ void GCodes::StartNextGCode(GCodeBuffer& gb, StringRef& reply)
 	}
 	else if (&gb == telnetGCode)
 	{
-// 		// Telnet
-// 		for (unsigned int i = 0; i < GCODE_LENGTH && webserver->GCodeAvailable(WebSource::Telnet); ++i)
-// 		{
-// 			char b = webserver->ReadGCode(WebSource::Telnet);
-// 			if (gb.Put(b))
-// 			{
-// 				gb.SetFinished(ActOnCode(gb, reply));
-// 				break;
-// 			}
-// 		}
+		// Telnet
+		for (unsigned int i = 0; i < GCODE_LENGTH && webserver->GCodeAvailable(WebSource::Telnet); ++i)
+		{
+			char b = webserver->ReadGCode(WebSource::Telnet);
+			if (gb.Put(b))
+			{
+				gb.SetFinished(ActOnCode(gb, reply));
+				break;
+			}
+		}
 	}
 	else if (&gb == serialGCode)
 	{

@@ -12,12 +12,12 @@ char *strptime(const char * a, const char * b, struct tm * c)
 
 void Platform::Message(const MessageType type, OutputBuffer *buffer)
 {
-	debugPrintf("Message(%i): %s\n", type, buffer->Data());
+	debugPrintf("Message(%i): %s", type, buffer->Data());
 	OutputBuffer::ReleaseAll(buffer);
 }
 void Platform::Message(const MessageType type, const char *buffer)
 {
-	debugPrintf("Message(%i): %s\n", type, buffer);
+	debugPrintf("Message(%i): %s", type, buffer);
 }
 
 void Platform::MessageVA(MessageType type, const char *fmt, va_list vargs)
