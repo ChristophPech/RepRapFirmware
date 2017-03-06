@@ -673,7 +673,9 @@ void DDA::RecalculateMove()
 void DDA::CalcNewSpeeds()
 {
 	// We may have to make multiple passes, because reducing one of the speeds may solve some problems but actually make matters worse on another axis.
-	bool limited;
+	bool limited=false;
+
+
 	do
 	{
 //		debugPrintf("  Pass, start=%f end=%f\n", targetStartSpeed, endSpeed);

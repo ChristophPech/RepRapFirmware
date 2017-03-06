@@ -708,6 +708,9 @@ void GCodes::StartNextGCode(GCodeBuffer& gb, StringRef& reply)
 			if (gb.Put(b))
 			{
 				gb.SetFinished(ActOnCode(gb, reply));
+				if (reply.strlen()) {
+					debugPrintf("Reply: %s\n", reply.Pointer());
+				};
 				break;
 			}
 		}

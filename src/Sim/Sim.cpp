@@ -7,6 +7,7 @@
 #include "GCodes/GCodes.h"
 #include "GCodes/GCodeBuffer.h"
 #include "Duet/Webserver.h"
+#include "Movement/Grid.h"
 
 extern "C" void debugPrintf(const char* fmt, ...);
 void debugPrintf(const char* fmt, ...)
@@ -27,6 +28,13 @@ const char* gcInit =
 "M208 X300 Y300 Z300\n"  // set axis maxima(adjust to suit your machine)
 "M208 X0 Y0 Z0 S1\n" // set axis minimum(adjust to make X = 0 and Y = 0 the edge of the bed)
 "M92 X80 Y80 Z2560\n"// Set axis steps / mm
+
+"M201 X2000  Y2000    Z15 E2000\n"// Accelerations(mm / s ^ 2)
+"M203 X15000 Y15000   Z360 E3600\n"// Maximum speeds(mm / min) Marlin had Z at 360 mm / s
+"M566 X600   Y600     Z60 E600\n"// Maximum instant speed changes mm / minute(sometime miscalled 'jerk')
+
+"M572  D0 S0.05\n" //pressure advance
+
 "M92 E420:420\n"// Set extruder steps per mm
 "G21\n"// Work in millimetres
 "G90\n"// Send absolute coordinates...
@@ -36,8 +44,7 @@ const char* gcInit =
 "M37 S1\n"//simulation
 ;
 
-const char* gcTest =
-
+const char* gcTestX =
 "G1 X65.300 Y67.544 E0.0789\n"//
 "G1 X66.573 Y66.203 E0.0797\n"//
 "G1 X67.890 Y64.889 E0.0802\n"//
@@ -46,6 +53,16 @@ const char* gcTest =
 "G1 X70.170 Y61.999 E0.1572 F1395\n"//
 "G1 X73.037 Y59.606 E0.1610\n"//
 "G1 X73.307 Y59.386 E0.0150\n"//
+;
+
+const char* gcTest =
+"G1 X60 Y50 F6000\n"//
+"G1 X65 Y50 E1 F2000\n"//
+"G1 X70 Y50 E1\n"//
+//; inner perimeter
+"G1 X75 Y50 F6000\n"//
+"G1 X80 Y50 E1 F2000\n"//
+"G1 X85 Y50 E1\n"//
 ;
 
 void SpinAll() {
@@ -98,9 +115,94 @@ int main()
 
 	gc.axesHomed = -1;
 	RunGCode(gcInit);
-	RunGCode(gcTest);
-
+	//RunGCode(gcTest);
 	SpinAll();
+
+	FILE* pF=fopen("d:/_out.csv","w");
+
+	HeightMap xHM(new float[265]);
+	xHM.ClearGridHeights();
+	xHM.useMap = true;
+
+	xHM.def.xMin = 10;
+	xHM.def.xMax = 165;
+	xHM.def.yMin = 10;
+	xHM.def.yMax = 165;
+	xHM.def.radius = -1;
+	xHM.def.spacing = 25;
+	xHM.def.numX = 7;
+	xHM.def.numY = 7;
+
+	/*float afH[256] = {
+		0, 0, 0, 0, 0, 0, 0, //0
+		0, 0, -0.502, -0.720, -0.785, -0.793, -0.440, //7
+		0, 0, -0.795, -0.850, -0.725, -1.155, -0.545, //14
+		0, 0, -0.880, -0.660, -0.955, -0.737, -0.488, //21
+		0, 0, -0.957, -0.803, -1.023, -0.930, -0.665, //28
+		0, 0, -0.940, -1.065, -1.082, -0.825, -0.400, //35
+		0, 0, -1.123, -1.103, -1.135, -1.062, -0.605 }; //42*/
+
+
+	const char* sDef = "26.00,299.00,12.00,188.00,-1.00,32.00,9,6";
+	xHM.def.ReadParameters(*(StringRef*)(&sDef));
+
+	float afH[256] = {
+		0.080, -0.043, -0.003, 0.110, 0.007, 0.112, 0.117, -0.068, 0.015,
+		0.085, -0.025, 0.120, 0.137, 0.097, 0.152, 0.115, 0.075, 0.127,
+		0.095, 0.082, 0.082, 0.175, 0.205, 0.207, 0.320, 0.135, 0.062,
+		0.085, 0.057, 0.125, 0.150, 0.205, 0.210, 0.107, 0.225, 0.212,
+		0.092, 0.033, 0.148, 0.180, 0.115, 0.232, 0.162, 0.045, 0.170,
+		- 0.053, 0.010, -0.008, 0.027, 0.095, -0.005, -0.005, 0.060, -0.078,
+	};
+
+
+	for (int iY = 0; iY < xHM.def.numY; iY++)
+	{
+		for (int iX = 0; iX < xHM.def.numX; iX++)
+		{
+			float val = afH[iX + iY*xHM.def.numX];
+			if (val) {
+				xHM.SetGridHeight(iX, iY, val);
+			}
+		}
+	}
+
+
+	float fStepX = 2.0f;
+	float fStepY = 2.0f;
+	printf("\n\n");
+	for (float fY = -1; fY < 200; fY += fStepX) {
+		if (fY < 0) {
+			fprintf(pF, ",");
+		}
+		else {
+			fprintf(pF, "y:%g,", fY);
+		}
+		for (float fX = 0; fX < 300; fX += fStepY) {
+			if (fY < 0) {
+				fprintf(pF, "x:%g,", fX);
+				continue;
+			}
+
+			if (fY >= 135) {
+				int iDbg = 0;
+			}
+			float fE = xHM.GetInterpolatedHeightError(fX, fY);
+			fprintf(pF, "%.3f,", fE);
+		}
+		fprintf(pF, "\n");
+	}
+	//xHM.gridHeights
+	
+	/*xmin, xmax, ymin, ymax, radius, spacing, xnum, ynum
+		10.00, 165.00, 10.00, 165.00, -1.00, 25.00, 7, 7
+		0, 0, 0, 0, 0, 0, 0
+		0, 0, -0.502, -0.720, -0.785, -0.793, -0.440
+		0, 0, -0.795, -0.850, -0.725, -1.155, -0.545
+		0, 0, -0.880, -0.660, -0.955, -0.737, -0.488
+		0, 0, -0.957, -0.803, -1.023, -0.930, -0.665
+		0, 0, -0.940, -1.065, -1.082, -0.825, -0.400
+		0, 0, -1.123, -1.103, -1.135, -1.062, -0.605*/
 
     return 0;
 }

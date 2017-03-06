@@ -1683,7 +1683,7 @@ float Platform::ActualInstantDv(size_t drive) const
 		const float eComp = pressureAdvance[drive - numAxes];
 		// If we are using pressure advance then we need to limit the extruder instantDv to avoid velocity mismatches.
 		// Assume that we want the extruder motor position to be accurate to within 0.01mm of extrusion.
-		// TODO remove this limit and add/remove steps to the previous and/or next move instead
+		// TODO remove this l imit and add/remove steps to the previous and/or next move instead
 		return (eComp <= 0.0) ? idv : min<float>(idv, 0.01/eComp);
 	}
 	else
