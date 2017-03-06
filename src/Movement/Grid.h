@@ -92,12 +92,8 @@ private:
 	uint32_t GetMapIndex(uint32_t xIndex, uint32_t yIndex) const { return (yIndex * def.NumXpoints()) + xIndex; }
 	bool IsHeightSet(uint32_t index) const { return (gridHeightSet[index/32] & (1 << (index & 31))) != 0; }
 
-	float GetHeightError(uint32_t xIndex, uint32_t yIndex) const;
-	float InterpolateX(uint32_t xIndex, uint32_t yIndex, float xFrac) const;
-	float InterpolateY(uint32_t xIndex, uint32_t yIndex, float yFrac) const;
-	float InterpolateXY(uint32_t xIndex, uint32_t yIndex, float xFrac, float yFrac) const;
-	float Interpolate2(uint32_t index1, uint32_t index2, float frac) const;
-	float InterpolateCorner(uint32_t cornerIndex, uint32_t indexX, uint32_t indexY, float xFrac, float yFrac) const;
+	float InterpolateBilinear(uint32_t xIndex, uint32_t yIndex, float xFrac, float yFrac) const;
+	float InterpolateBicubic(uint32_t xIndex, uint32_t yIndex, float xFrac, float yFrac) const;
 };
 
 #endif /* SRC_MOVEMENT_GRID_H_ */
