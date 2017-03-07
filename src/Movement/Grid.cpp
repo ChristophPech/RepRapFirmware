@@ -284,6 +284,8 @@ bool HeightMap::LoadFromFile(FileStore *f, StringRef& r)
 		}
 		return false;										// success!
 	}
+
+	ExtrapolateMissing();
 	return true;											// an error occurred
 }
 
@@ -319,6 +321,93 @@ void HeightMap::UseHeightMap(bool b)
 	useMap = b && def.IsValid();
 }
 
+void HeightMap::ExtrapolateMissing()
+{
+	//1: calculating the bed plane by least squares fit
+	//2: filling in missing points
+
+	//algorithm: http://www.ilikebigbits.com/blog/2015/3/2/plane-from-points
+	float sumX = 0, sumY = 0, sumZ = 0;
+	int n = 0;
+	for (int iY = 0; iY < def.numY; iY++)
+	{
+		for (int iX = 0; iX < def.numX; iX++)
+		{
+			int index = GetMapIndex(iX, iY);
+			if (!IsHeightSet(index)) { continue; }
+			float fX = (def.spacing * iX) + def.xMin;
+			float fY = (def.spacing * iY) + def.yMin;
+			float fZ = gridHeights[index];
+
+			n++;
+			sumX += fX; sumY += fY; sumZ += fZ;
+		}
+	}
+
+	float invN = 1.0 / float(n);
+	float centX = sumX * invN, centY = sumY * invN, centZ = sumZ * invN;
+
+	// Calc full 3x3 covariance matrix, excluding symmetries:
+	float xx = 0.0; float xy = 0.0; float xz = 0.0;
+	float yy = 0.0; float yz = 0.0; float zz = 0.0;
+
+	for (int iY = 0; iY < def.numY; iY++)
+	{
+		for (int iX = 0; iX < def.numX; iX++)
+		{
+			int index = GetMapIndex(iX, iY);
+			if (!IsHeightSet(index)) { continue; }
+			float fX = (def.spacing * iX) + def.xMin;
+			float fY = (def.spacing * iY) + def.yMin;
+			float fZ = gridHeights[index];
+
+			float rX = fX - centX;
+			float rY = fY - centY;
+			float rZ = fZ - centZ;
+
+			xx += rX * rX;
+			xy += rX * rY;
+			xz += rX * rZ;
+			yy += rY * rY;
+			yz += rY * rZ;
+			zz += rZ * rZ;
+		}
+	}
+
+	const float detZ = xx*yy - xy*xy;
+	if (detZ <= 0) {
+		//not a valid plane (or a vertical one)
+		return;
+	}
+
+	//plane equation: ax+by+cz=d -> z = (d-(ax+by))/c
+	float a = (yz*xy - xz*yy) / detZ;
+	float b = (xz*xy - yz*xx) / detZ;
+	float c = 1.0;
+	float normLenInv=1.0/sqrtf(a*a + b*b + 1);
+	a *= normLenInv;
+	b *= normLenInv;
+	c *= normLenInv;
+	float d = centX*a + centY*b + centZ*c;
+
+
+	//fill in the blanks
+	float invC = 1.0 / c;
+	for (int iY = 0; iY < def.numY; iY++)
+	{
+		for (int iX = 0; iX < def.numX; iX++)
+		{
+			int index = GetMapIndex(iX, iY);
+			if (IsHeightSet(index)) { continue; }
+			float fX = (def.spacing * iX) + def.xMin;
+			float fY = (def.spacing * iY) + def.yMin;
+
+			float fZ = (d - (a * fX + b * fY)) * invC;
+			gridHeights[index] = fZ;	//fill in Z but don't mark it as set so we can always differentiate between measured and extrapolated
+		}
+	}
+}
+
 // Compute the height error at the specified point
 float HeightMap::GetInterpolatedHeightError(float x, float y) const
 {
@@ -346,71 +435,8 @@ float HeightMap::GetInterpolatedHeightError(float x, float y) const
 	const float yFloor = floor(yf);
 	const int32_t yIndex = (int32_t)yFloor;
 
-	//return InterpolateBilinear(xIndex, yIndex, xf - xFloor, yf - yFloor);
-	return InterpolateBicubic(xIndex, yIndex, xf - xFloor, yf - yFloor);
-}
-
-namespace {
-	/// interpolates using real cubic interpolation between float
-	float InterpolateCubic(float p_fWeight, float p_fValue0, float p_fValue1, float p_fValue2, float p_fValue3)
-	{
-		//linear shortcut optimization ?
-		/*const bool bEq01 = p_fValue0 == p_fValue1;
-		const bool bEq23 = p_fValue2 == p_fValue3;
-		if (bEq01&&bEq23)
-		{
-			if (p_fValue1 == p_fValue2) { return p_fValue1; }
-			return p_fValue1*p_fWeight + p_fValue2*(1.0- p_fWeight);
-		}*/
-
-		float fTemp = p_fWeight*p_fWeight;
-		float fA0 = p_fValue3 - p_fValue2 - p_fValue0 + p_fValue1;
-		float fA1 = p_fValue0 - p_fValue1 - fA0;
-		float fA2 = p_fValue2 - p_fValue0;
-		float fA3 = p_fValue1;
-
-		return (fA0*p_fWeight*fTemp + fA1*fTemp + fA2*p_fWeight + fA3);
-	};
-}
-
-float HeightMap::InterpolateBicubic(uint32_t xIndex, uint32_t yIndex, float xFrac, float yFrac) const 
-{
-	//optimisation: memory vs. speed
-	//create a higher res heightmap by using this Bicubic, then using it as a linear on at runtime
-
-	const bool bCanX3 = xIndex < def.numX - 2;
-	const bool bCanX0 = xIndex > 0;
-	const bool bCanY3 = yIndex < def.numY - 2;
-
-	const uint32_t indexX1Y1 = GetMapIndex(xIndex, yIndex);			// (X0,Y0)
-	const uint32_t indexX2Y1 = indexX1Y1 + 1;						// (X1,Y0)
-	const uint32_t indexX0Y1 = bCanX0 ? indexX1Y1 - 1 : indexX1Y1;
-	const uint32_t indexX3Y1 = bCanX3 ? indexX2Y1 + 1 : indexX2Y1;
-
-	const float y1 = InterpolateCubic(xFrac, gridHeights[indexX0Y1], gridHeights[indexX1Y1], gridHeights[indexX2Y1], gridHeights[indexX3Y1]);
-
-	const uint32_t indexX1Y0 = yIndex > 0 ? indexX1Y1 - def.numX : indexX1Y1;
-	const uint32_t indexX2Y0 = indexX1Y0 + 1;
-	const uint32_t indexX0Y0 = bCanX0 ? indexX1Y0 - 1 : indexX1Y0;
-	const uint32_t indexX3Y0 = bCanX3 ? indexX2Y0 + 1 : indexX2Y0;
-
-	const float y0 = InterpolateCubic(xFrac, gridHeights[indexX0Y0], gridHeights[indexX1Y0], gridHeights[indexX2Y0], gridHeights[indexX3Y0]);
-
-	const uint32_t indexX1Y2 = indexX1Y1 + def.numX;				// (X0 Y1)
-	const uint32_t indexX2Y2 = indexX1Y2 + 1;						// (X1,Y0)
-	const uint32_t indexX0Y2 = bCanX0 ? indexX1Y2 - 1 : indexX1Y2;
-	const uint32_t indexX3Y2 = bCanX3 ? indexX2Y2 + 1 : indexX2Y2;
-
-	const float y2 = InterpolateCubic(xFrac, gridHeights[indexX0Y2], gridHeights[indexX1Y2], gridHeights[indexX2Y2], gridHeights[indexX3Y2]);
-
-	const uint32_t indexX1Y3 = bCanY3 ? indexX1Y2 + def.numX : indexX1Y2;
-	const uint32_t indexX2Y3 = indexX1Y3 + 1;
-	const uint32_t indexX0Y3 = bCanX0 ? indexX1Y3 - 1 : indexX1Y3;
-	const uint32_t indexX3Y3 = bCanX3 ? indexX2Y3 + 1 : indexX2Y3;
-
-	const float y3 = InterpolateCubic(xFrac, gridHeights[indexX0Y3], gridHeights[indexX1Y3], gridHeights[indexX2Y3], gridHeights[indexX3Y3]);
-
-	return InterpolateCubic(yFrac, y0, y1, y2, y3);
+	return InterpolateBilinear(xIndex, yIndex, xf - xFloor, yf - yFloor);
+	//return InterpolateBicosine(xIndex, yIndex, xf - xFloor, yf - yFloor);
 }
 
 float HeightMap::InterpolateBilinear(uint32_t xIndex, uint32_t yIndex, float xFrac, float yFrac) const
@@ -420,7 +446,6 @@ float HeightMap::InterpolateBilinear(uint32_t xIndex, uint32_t yIndex, float xFr
 	const uint32_t indexX0Y1 = indexX0Y0 + def.numX;				// (X0 Y1)
 	const uint32_t indexX1Y1 = indexX0Y1 + 1;						// (X1,Y1)
 
-
 	const float xyFrac = xFrac * yFrac;
 	return (gridHeights[indexX0Y0] * (1.0 - xFrac - yFrac + xyFrac))
 			+ (gridHeights[indexX1Y0] * (xFrac - xyFrac))
@@ -428,5 +453,11 @@ float HeightMap::InterpolateBilinear(uint32_t xIndex, uint32_t yIndex, float xFr
 			+ (gridHeights[indexX1Y1] * xyFrac);
 }
 
+float HeightMap::InterpolateBicosine(uint32_t xIndex, uint32_t yIndex, float xFrac, float yFrac) const
+{
+	float x = (1.0f - cosf(xFrac*PI))*0.5f;
+	float y = (1.0f - cosf(yFrac*PI))*0.5f;
+	return InterpolateBilinear(xIndex, yIndex, x, y);
+}
 
 // End

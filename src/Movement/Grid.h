@@ -81,6 +81,8 @@ public:
 
 	unsigned int GetStatistics(float& mean, float& deviation) const; // Return number of points probed, mean and RMS deviation
 
+	void ExtrapolateMissing();										//extrapolate missing points to ensure consistency
+
 private:
 	static const char *HeightMapComment;							// The start of the comment we write at the start of the height map file
 
@@ -93,7 +95,7 @@ private:
 	bool IsHeightSet(uint32_t index) const { return (gridHeightSet[index/32] & (1 << (index & 31))) != 0; }
 
 	float InterpolateBilinear(uint32_t xIndex, uint32_t yIndex, float xFrac, float yFrac) const;
-	float InterpolateBicubic(uint32_t xIndex, uint32_t yIndex, float xFrac, float yFrac) const;
+	float InterpolateBicosine(uint32_t xIndex, uint32_t yIndex, float xFrac, float yFrac) const;
 };
 
 #endif /* SRC_MOVEMENT_GRID_H_ */
