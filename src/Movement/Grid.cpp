@@ -74,7 +74,7 @@ bool GridDefinition::ReadParameters(const StringRef& s)
 	if (ok)
 	{
 		CheckValidity();
-		recipSpacing = 1.0/spacing;
+		recipSpacing = 1.0 / spacing;
 	}
 	else
 	{
@@ -416,16 +416,16 @@ float HeightMap::GetInterpolatedHeightError(float x, float y) const
 		return 0.0;
 	}
 
-	//could be cached in def
-	const float xMax = def.xMin + (def.numX-1)*def.spacing;
-	const float yMax = def.yMin + (def.numY-1)*def.spacing;
+	//last grid point
+	const float xLast = def.xMin + (def.numX-1)*def.spacing;
+	const float yLast = def.yMin + (def.numY-1)*def.spacing;
 
-	//clamp to rectangle
+	//clamp to rectangle so InterpolateXY will always have valid parameters
 	const float fEPSILON = 0.01;
 	if (x < def.xMin) { x = def.xMin; }
 	if (y < def.yMin) {	y = def.yMin; }
-	if (x > xMax -fEPSILON) { x = xMax -fEPSILON; }
-	if (y > yMax -fEPSILON) { y = yMax -fEPSILON; }
+	if (x > xLast -fEPSILON) { x = xLast -fEPSILON; }
+	if (y > yLast -fEPSILON) { y = yLast -fEPSILON; }
 
 
 	const float xf = (x - def.xMin) * def.recipSpacing;
@@ -435,11 +435,10 @@ float HeightMap::GetInterpolatedHeightError(float x, float y) const
 	const float yFloor = floor(yf);
 	const int32_t yIndex = (int32_t)yFloor;
 
-	return InterpolateBilinear(xIndex, yIndex, xf - xFloor, yf - yFloor);
-	//return InterpolateBicosine(xIndex, yIndex, xf - xFloor, yf - yFloor);
+	return InterpolateXY(xIndex, yIndex, xf - xFloor, yf - yFloor);
 }
 
-float HeightMap::InterpolateBilinear(uint32_t xIndex, uint32_t yIndex, float xFrac, float yFrac) const
+float HeightMap::InterpolateXY(uint32_t xIndex, uint32_t yIndex, float xFrac, float yFrac) const
 {
 	const uint32_t indexX0Y0 = GetMapIndex(xIndex, yIndex);			// (X0,Y0)
 	const uint32_t indexX1Y0 = indexX0Y0 + 1;						// (X1,Y0)
@@ -451,13 +450,6 @@ float HeightMap::InterpolateBilinear(uint32_t xIndex, uint32_t yIndex, float xFr
 			+ (gridHeights[indexX1Y0] * (xFrac - xyFrac))
 			+ (gridHeights[indexX0Y1] * (yFrac - xyFrac))
 			+ (gridHeights[indexX1Y1] * xyFrac);
-}
-
-float HeightMap::InterpolateBicosine(uint32_t xIndex, uint32_t yIndex, float xFrac, float yFrac) const
-{
-	float x = (1.0f - cosf(xFrac*PI))*0.5f;
-	float y = (1.0f - cosf(yFrac*PI))*0.5f;
-	return InterpolateBilinear(xIndex, yIndex, x, y);
 }
 
 // End

@@ -94,8 +94,7 @@ private:
 	uint32_t GetMapIndex(uint32_t xIndex, uint32_t yIndex) const { return (yIndex * def.NumXpoints()) + xIndex; }
 	bool IsHeightSet(uint32_t index) const { return (gridHeightSet[index/32] & (1 << (index & 31))) != 0; }
 
-	float InterpolateBilinear(uint32_t xIndex, uint32_t yIndex, float xFrac, float yFrac) const;
-	float InterpolateBicosine(uint32_t xIndex, uint32_t yIndex, float xFrac, float yFrac) const;
+	float InterpolateXY(uint32_t xIndex, uint32_t yIndex, float xFrac, float yFrac) const;
 };
 
 #endif /* SRC_MOVEMENT_GRID_H_ */
