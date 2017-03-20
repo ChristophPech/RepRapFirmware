@@ -193,6 +193,9 @@ bool ZProbeParameters::WriteParameters(FileStore *f, unsigned int probeType) con
 Platform::Platform() :
 		board(DEFAULT_BOARD_TYPE), active(false), errorCodeBits(0),
 		auxGCodeReply(nullptr), fileStructureInitialised(false), tickState(0), debugCode(0)
+#ifdef DUET_NG
+		, lastWarningMillis(0)
+#endif
 {
 	// Output
 	auxOutput = new OutputStack();
@@ -381,6 +384,21 @@ void Platform::Init()
 	// Initialise TMC2660 driver module
 	driversPowered = false;
 	TMC2660::Init(ENABLE_PINS, numTMC2660Drivers);
+
+	// Set up the VSSA sense pin. Older Duet WiFis don't have it connected, so we enable the pulldown resistor to keep it inactive.
+	{
+		pinMode(VssaSensePin, INPUT_PULLUP);
+		delayMicroseconds(10);
+		const bool vssaHighVal = digitalRead(VssaSensePin);
+		pinMode(VssaSensePin, INPUT_PULLDOWN);
+		delayMicroseconds(10);
+		const bool vssaLowVal = digitalRead(VssaSensePin);
+		vssaSenseWorking = vssaLowVal || !vssaHighVal;
+		if (vssaSenseWorking)
+		{
+			pinMode(VssaSensePin, INPUT);
+		}
+	}
 #endif
 
 	// Allow extrusion ancilliary PWM to use FAN0 even if FAN0 has not been disabled, for backwards compatibility
@@ -894,6 +912,14 @@ void Platform::Spin()
 		driversPowered = true;
 	}
 	TMC2660::SetDriversPowered(driversPowered);
+
+	// Check for a VSSA fault
+	const uint32_t now = millis();
+	if (vssaSenseWorking && now - lastWarningMillis > MinimumWarningInterval && digitalRead(VssaSensePin))
+	{
+		Message(GENERIC_MESSAGE, "Error: VSSA fault\n");
+		lastWarningMillis = now;
+	}
 #endif
 
 	// Update the time
