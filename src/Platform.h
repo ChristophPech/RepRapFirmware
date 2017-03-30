@@ -39,7 +39,7 @@ Licence: GPL
 // Platform-specific includes
 
 #include "RepRapFirmware.h"
-//#include "DueFlashStorage.h"
+#include "DueFlashStorage.h"
 #include "Fan.h"
 #include "Heating/TemperatureSensor.h"
 #include "Heating/Thermistor.h"
@@ -51,9 +51,9 @@ Licence: GPL
 #include "MessageType.h"
 
 #if defined(DUET_NG)
-//# include "DueXn.h"
+# include "DueXn.h"
 #elif !defined(__RADDS__)
-//# include "MCP4461/MCP4461.h"
+# include "MCP4461/MCP4461.h"
 #endif
 
 const bool FORWARDS = true;
@@ -383,8 +383,8 @@ public:
 	void Message(const MessageType type, const char *message);
 	void Message(const MessageType type, OutputBuffer *buffer);
 	void MessageF(const MessageType type, const char *fmt, ...);
-	void MessageVA(const MessageType type, const char *fmt, va_list vargs);
-	bool FlushMessages();							// Flush messages to USB and aux, returning true if there is more to send
+	void MessageF(const MessageType type, const char *fmt, va_list vargs);
+	bool FlushMessages();
 
 	// Movement
 

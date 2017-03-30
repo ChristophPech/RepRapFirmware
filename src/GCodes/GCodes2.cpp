@@ -3393,11 +3393,14 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 
 	case 908: //output LOG StepGuard
 	{
+		reply.catf("%d: ", platform->driveStallGuardLogPos);
+
 		platform->driveStallGuardLogDriver = -1;
 		for (size_t i = 0; i < platform->driveStallGuardLogPos; i++)
 		{
 			reply.catf("%d,", platform->driveStallGuardLog[i]);
 		}
+		platform->driveStallGuardLogPos = 0;
 	}
 	break;
 
