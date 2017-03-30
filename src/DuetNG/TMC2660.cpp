@@ -124,6 +124,7 @@ const uint32_t defaultSgscConfReg =
 const uint32_t defaultDrvConfReg =
 	TMC_REG_DRVCONF
 	| TMC_DRVCONF_VSENSE				// use high sensitivity range
+	| TMC_DRVCONF_RDSEL_1				// select "stallGuard2 level read back"
 	| 0;
 
 // Driver control register
@@ -158,6 +159,7 @@ struct TmcDriverState
 	void Enable(bool en);
 	void SpiSendWord(uint32_t dataOut);
 	uint32_t ReadStatus();
+	uint32_t ReadStallGuard();
 };
 
 // Initialise the state of the driver.
@@ -270,6 +272,14 @@ uint32_t TmcDriverState::ReadStatus()
 	return lastReadValue & (TMC_RR_SG | TMC_RR_OT | TMC_RR_OTPW | TMC_RR_S2G | TMC_RR_OLA | TMC_RR_OLB | TMC_RR_STST);
 }
 
+// Read the status
+uint32_t TmcDriverState::ReadStallGuard()
+{
+	// We need to send a command in order to get up-to-date status
+	SpiSendWord(smartEnReg);
+	return (lastReadValue>>10)&0x3FF;
+}
+
 static TmcDriverState driverStates[DRIVES];
 
 //--------------------------- Public interface ---------------------------------
@@ -357,6 +367,11 @@ namespace TMC2660
 	uint32_t GetStatus(size_t drive)
 	{
 		return (drive < numTmc2660Drivers) ? driverStates[drive].ReadStatus() : 0;
+	}
+
+	uint32_t GetStallGuard(size_t drive)
+	{
+		return (drive < numTmc2660Drivers) ? driverStates[drive].ReadStallGuard() : 0;
 	}
 
 	bool SetMicrostepping(size_t drive, int microsteps, int mode)

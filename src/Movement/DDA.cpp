@@ -1316,6 +1316,14 @@ bool DDA::Step()
 			Platform::StepDriversLow();									// set all step pins low
 		}
 
+		//LOG StepGuard ...
+		if (platform->driveStallGuardLogDriver != -1) {
+			size_t iCnt=ARRAY_SIZE(platform->driveStallGuardLog);
+			uint16_t val=(uint16_t)platform->GetMotorStallGuard(platform->driveStallGuardLogDriver);
+			platform->driveStallGuardLog[platform->driveStallGuardLogPos%iCnt] = val;
+			platform->driveStallGuardLogPos++;
+		}
+
 		// 6. Check for move completed
 		if (firstDM == nullptr)
 		{
