@@ -3375,6 +3375,32 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 		}
 		break;
 
+	case 907: //enable/disable LOG StepGuard
+	{
+		platform->driveStallGuardLogDriver = -1;
+
+		for (size_t axis = 0; axis < numAxes; axis++)
+		{
+			if (gb.Seen(axisLetters[axis]))
+			{
+				memset(platform->driveStallGuardLog, 0, sizeof(platform->driveStallGuardLog));
+				platform->driveStallGuardLogDriver=axis;
+				platform->driveStallGuardLogPos = 0;
+			}
+		}
+	}
+	break;
+
+	case 908: //output LOG StepGuard
+	{
+		platform->driveStallGuardLogDriver = -1;
+		for (size_t i = 0; i < platform->driveStallGuardLogPos; i++)
+		{
+			reply.catf("%d,", platform->driveStallGuardLog[i]);
+		}
+	}
+	break;
+
 	case 906: // Set/report Motor currents
 	case 913: // Set/report motor current percent
 		{

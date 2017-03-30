@@ -2081,6 +2081,36 @@ void Platform::SetMotorCurrent(size_t drive, float currentOrPercent, bool isPerc
 	}
 }
 
+uint32_t Platform::GetDriverStallGuard(size_t driver)
+{
+#if defined(DUET_NG)
+	if (driver < numTMC2660Drivers)
+	{
+		return TMC2660::GetStallGuard(driver);
+	}
+#endif
+	return 0;
+}
+
+uint32_t Platform::GetMotorStallGuard(size_t drive)
+{
+	const size_t numAxes = reprap.GetGCodes()->GetNumAxes();
+	if (drive < numAxes)
+	{
+		for (size_t i = 0; i < axisDrivers[drive].numDrivers; ++i)
+		{
+			return GetDriverStallGuard(axisDrivers[drive].driverNumbers[i]);
+		}
+
+	}
+	else if (drive < DRIVES)
+	{
+		return GetDriverStallGuard(extruderDrivers[drive - numAxes]);
+	}
+
+	return 0;
+}
+
 // This must not be called from an ISR, or with interrupts disabled.
 void Platform::UpdateMotorCurrent(size_t driver)
 {

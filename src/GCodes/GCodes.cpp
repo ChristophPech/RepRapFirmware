@@ -48,7 +48,7 @@ const char* HOME_ALL_G = "homeall.g";
 const char* HOME_DELTA_G = "homedelta.g";
 const char* DefaultHeightMapFile = "heightmap.csv";
 
-const size_t gcodeReplyLength = 2048;			// long enough to pass back a reasonable number of files in response to M20
+const size_t gcodeReplyLength = 2048*4;			// long enough to pass back a reasonable number of files in response to M20
 
 
 void GCodes::RestorePoint::Init()

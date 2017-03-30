@@ -677,7 +677,9 @@ void DDA::RecalculateMove()
 void DDA::CalcNewSpeeds()
 {
 	// We may have to make multiple passes, because reducing one of the speeds may solve some problems but actually make matters worse on another axis.
-	bool limited;
+	bool limited=false;
+
+
 	do
 	{
 //		debugPrintf("  Pass, start=%f end=%f\n", targetStartSpeed, endSpeed);
@@ -1312,6 +1314,14 @@ bool DDA::Step()
 		else
 		{
 			Platform::StepDriversLow();									// set all step pins low
+		}
+
+		//LOG StepGuard ...
+		if (platform->driveStallGuardLogDriver != -1) {
+			size_t iCnt=ARRAY_SIZE(platform->driveStallGuardLog);
+			uint16_t val=(uint16_t)platform->GetMotorStallGuard(platform->driveStallGuardLogDriver);
+			platform->driveStallGuardLog[platform->driveStallGuardLogPos%iCnt] = val;
+			platform->driveStallGuardLogPos++;
 		}
 
 		// 6. Check for move completed
