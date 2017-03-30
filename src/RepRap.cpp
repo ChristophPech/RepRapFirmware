@@ -606,7 +606,7 @@ void RepRap::SetMessage(const char *msg)
 
 	if (platform->HaveAux())
 	{
-		platform->SendMessage(msg);
+		platform->SendAuxMessage(msg);
 	}
 }
 

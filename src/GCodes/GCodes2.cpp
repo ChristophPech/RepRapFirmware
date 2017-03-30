@@ -10,6 +10,7 @@
 #include "GCodes.h"
 
 #include "GCodeBuffer.h"
+#include "GCodeQueue.h"
 #include "Heating/Heat.h"
 #include "Movement/Move.h"
 #include "Network.h"
@@ -42,6 +43,13 @@ bool GCodes::ActOnCode(GCodeBuffer& gb, StringRef& reply)
 	// Discard empty buffers right away
 	if (gb.IsEmpty())
 	{
+		return true;
+	}
+
+	// Can we queue this code?
+	if (gb.CanQueueCodes() && codeQueue->QueueCode(gb, segmentsLeft))
+	{
+		HandleReply(gb, false, "");
 		return true;
 	}
 
@@ -203,7 +211,7 @@ bool GCodes::HandleGcode(GCodeBuffer& gb, StringRef& reply)
 				break;
 
 			default:	// clear height map
-				reprap.GetMove()->AccessBedProbeGrid().ClearGridHeights();
+				reprap.GetMove()->SetIdentityTransform();
 				break;
 			}
 		}
@@ -432,6 +440,30 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 
 				bool encapsulateList = ((&gb != serialGCode && &gb != telnetGCode) || platform->Emulating() != marlin);
 				FileInfo fileInfo;
+				if (platform->GetMassStorage()->FindFirst(dir, fileInfo))
+				{
+					// iterate through all entries and append each file name
+					do {
+						if (encapsulateList)
+						{
+							fileResponse->catf("%c%s%c%c", FILE_LIST_BRACKET, fileInfo.fileName, FILE_LIST_BRACKET, FILE_LIST_SEPARATOR);
+						}
+						else
+						{
+							fileResponse->catf("%s\n", fileInfo.fileName);
+						}
+					} while (platform->GetMassStorage()->FindNext(fileInfo));
+
+					if (encapsulateList)
+					{
+						// remove the last separator
+						(*fileResponse)[fileResponse->Length() - 1] = 0;
+					}
+				}
+				else
+				{
+					fileResponse->cat("NONE\n");
+				}
 			}
 
 			UnlockAll(gb);
@@ -446,6 +478,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 		}
 		{
 			size_t card = (gb.Seen('P')) ? gb.GetIValue() : 0;
+			result = platform->GetMassStorage()->Mount(card, reply, true);
 		}
 		break;
 
@@ -456,6 +489,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 		}
 		{
 			size_t card = (gb.Seen('P')) ? gb.GetIValue() : 0;
+			result = platform->GetMassStorage()->Unmount(card, reply);
 		}
 		break;
 
@@ -479,6 +513,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 				QueueFileToPrint(filename);
 				if (fileToPrint.IsLive())
 				{
+					reprap.GetPrintMonitor()->StartingPrint(filename);
 					if (platform->Emulating() == marlin && (&gb == serialGCode || &gb == telnetGCode))
 					{
 						reply.copy("File opened\nFile selected");
@@ -491,6 +526,8 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 
 					if (code == 32)
 					{
+						fileGCode->OriginalMachineState().fileState.MoveFrom(fileToPrint);
+						reprap.GetPrintMonitor()->StartedPrint();
 					}
 				}
 				else
@@ -520,6 +557,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 		else
 		{
 			fileGCode->OriginalMachineState().fileState.MoveFrom(fileToPrint);
+			reprap.GetPrintMonitor()->StartedPrint();
 		}
 		break;
 
@@ -538,6 +576,11 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 		if (isPaused)
 		{
 			reply.copy("Printing is already paused!!");
+			error = true;
+		}
+		else if (!reprap.GetPrintMonitor()->IsPrinting())
+		{
+			reply.copy("Cannot pause print, because no file is being printed!");
 			error = true;
 		}
 		else
@@ -589,6 +632,16 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 		break;
 
 	case 27: // Report print status - Deprecated
+		if (reprap.GetPrintMonitor()->IsPrinting())
+		{
+			// Pronterface keeps sending M27 commands if "Monitor status" is checked, and it specifically expects the following response syntax
+			FileData& fileBeingPrinted = fileGCode->OriginalMachineState().fileState;
+			reply.printf("SD printing byte %lu/%lu", fileBeingPrinted.GetPosition(), fileBeingPrinted.Length());
+		}
+		else
+		{
+			reply.copy("Not SD printing.");
+		}
 		break;
 
 	case 28: // Write to file
@@ -634,6 +687,14 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 		{
 			const char* filename = gb.GetUnprecedentedString(true);	// get filename, or nullptr if none provided
 			OutputBuffer *fileInfoResponse;
+			result = reprap.GetPrintMonitor()->GetFileInfoResponse(filename, fileInfoResponse);
+			if (result)
+			{
+				fileInfoResponse->cat('\n');
+				UnlockAll(gb);
+				HandleReply(gb, false, fileInfoResponse);
+				return true;
+			}
 		}
 		break;
 
@@ -894,6 +955,141 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 
 	case 106: // Set/report fan values
 		{
+			bool seenFanNum = false;
+			int32_t fanNum = 0;			// Default to the first fan
+			gb.TryGetIValue('P', fanNum, seenFanNum);
+			if (fanNum < 0 || fanNum > (int)NUM_FANS)
+			{
+				reply.printf("Fan number %d is invalid, must be between 0 and %u", fanNum, NUM_FANS);
+			}
+			else
+			{
+				Fan& fan = platform->GetFan(fanNum);
+				if (!fan.IsEnabled())
+				{
+					reply.printf("Fan number %d is disabled", fanNum);
+				}
+				else
+				{
+					bool seen = false;
+					if (gb.Seen('I'))		// Invert cooling
+					{
+						const int invert = gb.GetIValue();
+						if (invert < 0)
+						{
+							fan.Disable();
+						}
+						else
+						{
+							fan.SetInverted(invert > 0);
+						}
+						seen = true;
+					}
+
+					if (gb.Seen('F'))		// Set PWM frequency
+					{
+						fan.SetPwmFrequency(gb.GetFValue());
+						seen = true;
+					}
+
+					if (gb.Seen('T'))		// Set thermostatic trigger temperature
+					{
+						seen = true;
+						fan.SetTriggerTemperature(gb.GetFValue());
+					}
+
+					if (gb.Seen('B'))		// Set blip time
+					{
+						seen = true;
+						fan.SetBlipTime(gb.GetFValue());
+					}
+
+					if (gb.Seen('L'))		// Set minimum speed
+					{
+						seen = true;
+						fan.SetMinValue(gb.GetFValue());
+					}
+
+					if (gb.Seen('H'))		// Set thermostatically-controller heaters
+					{
+						seen = true;
+						long heaters[HEATERS];
+						size_t numH = HEATERS;
+						gb.GetLongArray(heaters, numH);
+						// Note that M106 H-1 disables thermostatic mode. The following code implements that automatically.
+						uint16_t hh = 0;
+						for (size_t h = 0; h < numH; ++h)
+						{
+							const int hnum = heaters[h];
+							if (hnum >= 0 && hnum < HEATERS)
+							{
+								hh |= (1u << (unsigned int)hnum);
+							}
+						}
+						if (hh != 0)
+						{
+							platform->SetFanValue(fanNum, 1.0);			// default the fan speed to full for safety
+						}
+						fan.SetHeatersMonitored(hh);
+					}
+
+					if (gb.Seen('S'))		// Set new fan value - process this after processing 'H' or it may not be acted on
+					{
+						const float f = constrain<float>(gb.GetFValue(), 0.0, 255.0);
+						if (seen || seenFanNum)
+						{
+							platform->SetFanValue(fanNum, f);
+						}
+						else
+						{
+							// We are processing an M106 S### command with no other recognised parameters and we have a tool selected.
+							// Apply the fan speed setting to the fans in the fan mapping for the current tool.
+							lastDefaultFanSpeed = f;
+							SetMappedFanSpeed();
+						}
+					}
+					else if (gb.Seen('R'))
+					{
+						const int i = gb.GetIValue();
+						switch(i)
+						{
+						case 0:
+						case 1:
+							// Restore fan speed to value when print was paused
+							platform->SetFanValue(fanNum, pausedFanValues[fanNum]);
+							break;
+						case 2:
+							// Set the speeds of mapped fans to the last known value. Fan number is ignored.
+							SetMappedFanSpeed();
+							break;
+						default:
+							break;
+						}
+					}
+					else if (!seen)
+					{
+						reply.printf("Fan%i frequency: %dHz, speed: %d%%, min: %d%%, blip: %.2f, inverted: %s",
+										fanNum,
+										(int)(fan.GetPwmFrequency()),
+										(int)(fan.GetValue() * 100.0),
+										(int)(fan.GetMinValue() * 100.0),
+										fan.GetBlipTime(),
+										(fan.GetInverted()) ? "yes" : "no");
+						uint16_t hh = fan.GetHeatersMonitored();
+						if (hh != 0)
+						{
+							reply.catf(", trigger: %dC, heaters:", (int)fan.GetTriggerTemperature());
+							for (unsigned int i = 0; i < HEATERS; ++i)
+							{
+								if ((hh & (1u << i)) != 0)
+								{
+									reply.catf(" %u", i);
+								}
+							}
+						}
+					}
+				}
+			}
 		}
 		break;
 
@@ -1022,6 +1218,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 				toolNumber += gb.GetToolNumberAdjust();
 				if (!cancelWait && !ToolHeatersAtSetTemperatures(reprap.GetTool(toolNumber), true))
 				{
+					CheckReportDue(gb, reply);				// check whether we need to send a temperature or status report
 					isWaiting = true;
 					return false;
 				}
@@ -1038,6 +1235,12 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 				{
 					for (size_t i=0; i<heaterCount; i++)
 					{
+						if (!reprap.GetHeat()->HeaterAtSetTemperature(heaters[i], true))
+						{
+							CheckReportDue(gb, reply);		// check whether we need to send a temperature or status report
+							isWaiting = true;
+							return false;
+						}
 					}
 				}
 				seen = true;
@@ -1046,10 +1249,26 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 			if (gb.Seen('C'))
 			{
 				// Wait for chamber heater to be ready
+				const int8_t chamberHeater = reprap.GetHeat()->GetChamberHeater();
+				if (chamberHeater != -1)
+				{
+					if (!cancelWait && !reprap.GetHeat()->HeaterAtSetTemperature(chamberHeater, true))
+					{
+						CheckReportDue(gb, reply);			// check whether we need to send a temperature or status report
+						isWaiting = true;
+						return false;
+					}
+				}
 				seen = true;
 			}
 
 			// Wait for all heaters to be ready
+			if (!seen && !cancelWait && !reprap.GetHeat()->AllHeatersAtSetTemperatures(true))
+			{
+				CheckReportDue(gb, reply);					// check whether we need to send a temperature or status report
+				isWaiting = true;
+				return false;
+			}
 
 			// If we get here, there is nothing more to wait for
 			cancelWait = isWaiting = false;
@@ -1101,7 +1320,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 		}
 		else
 		{
-			//reply.printf("Heat sample time is %.3f seconds", platform->GetHeatSampleTime());
+			reply.printf("Heat sample time is %.3f seconds", platform->GetHeatSampleTime());
 		}
 		break;
 
@@ -1117,7 +1336,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 					bedHeater = -1;
 
 					// If we're disabling the hot bed, make sure the old heater is turned off
-					//reprap.GetHeat()->SwitchOff(reprap.GetHeat()->GetBedHeater());
+					reprap.GetHeat()->SwitchOff(reprap.GetHeat()->GetBedHeater());
 				}
 				else if (bedHeater >= HEATERS)
 				{
@@ -1125,7 +1344,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 					error = true;
 					break;
 				}
-				//reprap.GetHeat()->SetBedHeater(bedHeater);
+				reprap.GetHeat()->SetBedHeater(bedHeater);
 
 				if (bedHeater < 0)
 				{
@@ -1135,6 +1354,13 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 			}
 			else
 			{
+				bedHeater = reprap.GetHeat()->GetBedHeater();
+				if (bedHeater < 0)
+				{
+					reply.copy("Hot bed is not present!");
+					error = true;
+					break;
+				}
 			}
 
 			if(gb.Seen('S'))
@@ -1142,17 +1368,17 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 				float temperature = gb.GetFValue();
 				if (temperature < NEARLY_ABS_ZERO)
 				{
-					//reprap.GetHeat()->SwitchOff(bedHeater);
+					reprap.GetHeat()->SwitchOff(bedHeater);
 				}
 				else
 				{
-					//reprap.GetHeat()->SetActiveTemperature(bedHeater, temperature);
-					//reprap.GetHeat()->Activate(bedHeater);
+					reprap.GetHeat()->SetActiveTemperature(bedHeater, temperature);
+					reprap.GetHeat()->Activate(bedHeater);
 				}
 			}
 			if(gb.Seen('R'))
 			{
-				//reprap.GetHeat()->SetStandbyTemperature(bedHeater, gb.GetFValue());
+				reprap.GetHeat()->SetStandbyTemperature(bedHeater, gb.GetFValue());
 			}
 		}
 		break;
@@ -1167,9 +1393,17 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 				int heater = gb.GetIValue();
 				if (heater < 0)
 				{
+					const int8_t currentHeater = reprap.GetHeat()->GetChamberHeater();
+					if (currentHeater != -1)
+					{
+						reprap.GetHeat()->SwitchOff(currentHeater);
+					}
+
+					reprap.GetHeat()->SetChamberHeater(-1);
 				}
 				else if (heater < HEATERS)
 				{
+					reprap.GetHeat()->SetChamberHeater(heater);
 				}
 				else
 				{
@@ -1180,10 +1414,41 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 
 			if (gb.Seen('S'))
 			{
+				seen = true;
+
+				const int8_t currentHeater = reprap.GetHeat()->GetChamberHeater();
+				if (currentHeater != -1)
+				{
+					float temperature = gb.GetFValue();
+
+					if (temperature < NEARLY_ABS_ZERO)
+					{
+						reprap.GetHeat()->SwitchOff(currentHeater);
+					}
+					else
+					{
+						reprap.GetHeat()->SetActiveTemperature(currentHeater, temperature);
+						reprap.GetHeat()->Activate(currentHeater);
+					}
+				}
+				else
+				{
+					reply.copy("No chamber heater has been set up yet!");
+					error = true;
+				}
 			}
 
 			if (!seen)
 			{
+				const int8_t currentHeater = reprap.GetHeat()->GetChamberHeater();
+				if (currentHeater != -1)
+				{
+					reply.printf("Chamber heater %d is currently at %.1fC", currentHeater, reprap.GetHeat()->GetTemperature(currentHeater));
+				}
+				else
+				{
+					reply.copy("No chamber heater has been configured yet.");
+				}
 			}
 		}
 		break;
@@ -1201,6 +1466,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 				const float limit = gb.GetFValue();
 				if (limit > BAD_LOW_TEMPERATURE && limit < BAD_ERROR_TEMPERATURE)
 				{
+					reprap.GetHeat()->SetTemperatureLimit(heater, limit);
 				}
 				else
 				{
@@ -1210,19 +1476,56 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 			}
 			else
 			{
+				reply.printf("Temperature limit for heater %d is %.1fC", heater, reprap.GetHeat()->GetTemperatureLimit(heater));
 			}
 		}
 		break;
 
 	case 144: // Set bed to standby
 		{
+			const int8_t bedHeater = reprap.GetHeat()->GetBedHeater();
+			if (bedHeater >= 0)
+			{
+				reprap.GetHeat()->Standby(bedHeater);
+			}
 		}
 		break;
 
 	case 190: // Set bed temperature and wait
 	case 191: // Set chamber temperature and wait
 		{
+			const int8_t heater = (code == 191) ? reprap.GetHeat()->GetChamberHeater() : reprap.GetHeat()->GetBedHeater();
+			if (heater >= 0)
+			{
+				float temperature;
+				bool waitWhenCooling;
+				if (gb.Seen('R'))
+				{
+					waitWhenCooling = true;
+					temperature = gb.GetFValue();
+				}
+				else if (gb.Seen('S'))
+				{
+					waitWhenCooling = false;
+					temperature = gb.GetFValue();
+				}
+				else
+				{
+					break;		// no target temperature given
+				}
 
+				reprap.GetHeat()->SetActiveTemperature(heater, temperature);
+				reprap.GetHeat()->Activate(heater);
+				if (cancelWait || reprap.GetHeat()->HeaterAtSetTemperature(heater, waitWhenCooling))
+				{
+					cancelWait = isWaiting = false;
+					break;
+				}
+
+				CheckReportDue(gb, reply);			// check whether we need to send a temperature or status report
+				isWaiting = true;
+				return false;
+			}
 		}
 		break;
 
@@ -1310,7 +1613,27 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 		}
 		break;
 
-	case 206:  // Offset axes - Deprecated
+	case 204: // Set max travel and printing accelerations
+		{
+			bool seen = false;
+			if (gb.Seen('P'))
+			{
+				platform->SetMaxPrintingAcceleration(gb.GetFValue());
+				seen = true;
+			}
+			if (gb.Seen('T'))
+			{
+				platform->SetMaxTravelAcceleration(gb.GetFValue());
+				seen = true;
+			}
+			if (!seen)
+			{
+				reply.printf("Maximum printing acceleration %.1f, maximum travel acceleration %.1f", platform->GetMaxPrintingAcceleration(), platform->GetMaxTravelAcceleration());
+			}
+		}
+		break;
+
+	case 206: // Offset axes - Deprecated
 		result = OffsetAxes(gb);
 		break;
 
@@ -1534,16 +1857,46 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 	case 302: // Allow, deny or report cold extrudes
 		if (gb.Seen('P'))
 		{
+			reprap.GetHeat()->AllowColdExtrude(gb.GetIValue() > 0);
 		}
 		else
 		{
+			reply.printf("Cold extrusion is %s, use M302 P[1/0] to allow/deny it",
+					reprap.GetHeat()->ColdExtrude() ? "allowed" : "denied");
 		}
 		break;
 
 	case 303: // Run PID tuning
+		if (gb.Seen('H'))
+		{
+			const int heater = gb.GetIValue();
+			const float temperature = (gb.Seen('S')) ? gb.GetFValue()
+										: heater == reprap.GetHeat()->GetBedHeater() ? 75.0
+										: heater == reprap.GetHeat()->GetChamberHeater() ? 50.0
+										: 200.0;
+			const float maxPwm = (gb.Seen('P')) ? gb.GetFValue() : 1.0;
+			if (heater >= 0 && heater < HEATERS && maxPwm >= 0.1 && maxPwm <= 1.0 && temperature <= reprap.GetHeat()->GetTemperatureLimit(heater))
+			{
+				reprap.GetHeat()->StartAutoTune(heater, temperature, maxPwm, reply);
+			}
+			else
+			{
+				reply.printf("Bad parameter in M303 command");
+			}
+		}
+		else
+		{
+			reprap.GetHeat()->GetAutoTuneStatus(reply);
+		}
+		break;
 
 	case 304: // Set/report heated bed PID values
 		{
+			const int8_t bedHeater = reprap.GetHeat()->GetBedHeater();
+			if (bedHeater >= 0)
+			{
+				SetPidParameters(gb, bedHeater, reply);
+			}
 		}
 		break;
 
@@ -1552,6 +1905,54 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 		break;
 
 	case 307: // Set heater process model parameters
+		if (gb.Seen('H'))
+		{
+			size_t heater = gb.GetIValue();
+			if (heater < HEATERS)
+			{
+				const FopDt& model = reprap.GetHeat()->GetHeaterModel(heater);
+				bool seen = false;
+				float gain = model.GetGain(),
+					tc = model.GetTimeConstant(),
+					td = model.GetDeadTime(),
+					maxPwm = model.GetMaxPwm();
+				int32_t dontUsePid = model.UsePid() ? 0 : 1;
+
+				gb.TryGetFValue('A', gain, seen);
+				gb.TryGetFValue('C', tc, seen);
+				gb.TryGetFValue('D', td, seen);
+				gb.TryGetIValue('B', dontUsePid, seen);
+				gb.TryGetFValue('S', maxPwm, seen);
+
+				if (seen)
+				{
+					if (!reprap.GetHeat()->SetHeaterModel(heater, gain, tc, td, maxPwm, dontUsePid == 0))
+					{
+						reply.copy("Error: bad model parameters");
+					}
+				}
+				else if (!model.IsEnabled())
+				{
+					reply.printf("Heater %u is disabled", heater);
+				}
+				else
+				{
+					const char* mode = (!model.UsePid()) ? "bang-bang"
+										: (model.ArePidParametersOverridden()) ? "custom PID"
+											: "PID";
+					reply.printf("Heater %u model: gain %.1f, time constant %.1f, dead time %.1f, max PWM %.2f, mode: %s",
+							heater, model.GetGain(), model.GetTimeConstant(), model.GetDeadTime(), model.GetMaxPwm(), mode);
+					if (model.UsePid())
+					{
+						// When reporting the PID parameters, we scale them by 255 for compatibility with older firmware and other firmware
+						M301PidParameters params = model.GetM301PidParameters(false);
+						reply.catf("\nComputed PID parameters for setpoint change: P%.1f, I%.3f, D%.1f", params.kP, params.kI, params.kD);
+						params = model.GetM301PidParameters(true);
+						reply.catf("\nComputed PID parameters for load change: P%.1f, I%.3f, D%.1f", params.kP, params.kI, params.kD);
+					}
+				}
+			}
+		}
 		break;
 
 	case 350: // Set/report microstepping
@@ -1693,32 +2094,18 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 
 	case 408: // Get status in JSON format
 		{
-			int type = gb.Seen('S') ? gb.GetIValue() : 0;
-			int seq = gb.Seen('R') ? gb.GetIValue() : -1;
-
-			OutputBuffer *statusResponse = nullptr;
-			switch (type)
+			const int type = gb.Seen('S') ? gb.GetIValue() : 0;
+			const int seq = gb.Seen('R') ? gb.GetIValue() : -1;
+			if (&gb == auxGCode)
 			{
-				case 0:
-				case 1:
-					statusResponse = reprap.GetLegacyStatusResponse(type + 2, seq);
-					break;
-
-				case 2:
-				case 3:
-				case 4:
-					statusResponse = reprap.GetStatusResponse(type - 1, (&gb == auxGCode) ? ResponseSource::AUX : ResponseSource::Generic);
-					break;
-
-				case 5:
-					statusResponse = reprap.GetConfigResponse();
-					break;
+				lastAuxStatusReportType = type;
 			}
+
+			OutputBuffer * const statusResponse = GenerateJsonStatusResponse(type, seq, (&gb == auxGCode) ? ResponseSource::AUX : ResponseSource::Generic);
 
 			if (statusResponse != nullptr)
 			{
 				UnlockAll(gb);
-				statusResponse->cat('\n');
 				HandleReply(gb, false, statusResponse);
 				return true;
 			}
@@ -1734,6 +2121,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 		break;
 
 	case 502: // Revert to default "factory settings"
+		reprap.GetHeat()->ResetHeaterModels();				// in case some heaters have no M307 commands in config.g
 		reprap.GetMove()->AccessDeltaParams().Init();		// in case M665 and M666 in config.g don't define all the parameters
 		platform->SetZProbeDefaults();
 		DoFileMacro(gb, "config.g", true, true);
@@ -1836,19 +2224,21 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 				seen = true;
 				if (gb.GetIValue() != 0)
 				{
+					reprap.GetNetwork()->Enable();
 				}
 				else
 				{
+					reprap.GetNetwork()->Disable();
 				}
 			}
 
 			if (!seen)
 			{
-				//const byte *config_ip = platform->GetIPAddress();
-				//const byte *actual_ip = reprap.GetNetwork()->GetIPAddress();
-				//reply.printf("Network is %s, configured IP address: %d.%d.%d.%d, actual IP address: %d.%d.%d.%d",
-				//		reprap.GetNetwork()->IsEnabled() ? "enabled" : "disabled",
-				//		config_ip[0], config_ip[1], config_ip[2], config_ip[3], actual_ip[0], actual_ip[1], actual_ip[2], actual_ip[3]);
+				const byte *config_ip = platform->GetIPAddress();
+				const byte *actual_ip = reprap.GetNetwork()->GetIPAddress();
+				reply.printf("Network is %s, configured IP address: %d.%d.%d.%d, actual IP address: %d.%d.%d.%d",
+						reprap.GetNetwork()->IsEnabled() ? "enabled" : "disabled",
+						config_ip[0], config_ip[1], config_ip[2], config_ip[3], actual_ip[0], actual_ip[1], actual_ip[2], actual_ip[3]);
 			}
 		}
 		break;
@@ -2028,35 +2418,35 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 		break;
 
 	case 559: // Upload config.g or another gcode file to put in the sys directory
-	{
-		const char* str = (gb.Seen('P') ? gb.GetString() : platform->GetConfigFile());
-		const bool ok = OpenFileToWrite(gb, platform->GetSysDir(), str);
-		if (ok)
 		{
-			reply.printf("Writing to file: %s", str);
+			const char* str = (gb.Seen('P') ? gb.GetString() : platform->GetConfigFile());
+			const bool ok = OpenFileToWrite(gb, platform->GetSysDir(), str);
+			if (ok)
+			{
+				reply.printf("Writing to file: %s", str);
+			}
+			else
+			{
+				reply.printf("Can't open file %s for writing.", str);
+				error = true;
+			}
 		}
-		else
-		{
-			reply.printf("Can't open file %s for writing.", str);
-			error = true;
-		}
-	}
 		break;
 
 	case 560: // Upload reprap.htm or another web interface file
-	{
-		const char* str = (gb.Seen('P') ? gb.GetString() : INDEX_PAGE_FILE);
-		const bool ok = OpenFileToWrite(gb, platform->GetWebDir(), str);
-		if (ok)
 		{
-			reply.printf("Writing to file: %s", str);
+			const char* str = (gb.Seen('P') ? gb.GetString() : INDEX_PAGE_FILE);
+			const bool ok = OpenFileToWrite(gb, platform->GetWebDir(), str);
+			if (ok)
+			{
+				reply.printf("Writing to file: %s", str);
+			}
+			else
+			{
+				reply.printf("Can't open file %s for writing.", str);
+				error = true;
+			}
 		}
-		else
-		{
-			reply.printf("Can't open file %s for writing.", str);
-			error = true;
-		}
-	}
 		break;
 
 	case 561: // Set identity transform (also clears bed probe grid)
@@ -2253,10 +2643,12 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 			if (heater < HEATERS)
 			{
 				float maxTempExcursion, maxFaultTime;
+				reprap.GetHeat()->GetHeaterProtection(heater, maxTempExcursion, maxFaultTime);
 				gb.TryGetFValue('P', maxFaultTime, seen);
 				gb.TryGetFValue('T', maxTempExcursion, seen);
 				if (seen)
 				{
+					reprap.GetHeat()->SetHeaterProtection(heater, maxTempExcursion, maxFaultTime);
 				}
 				else
 				{
@@ -2324,7 +2716,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 			const int heater = gb.GetIValue();
 			if (heater >= 0 && heater < HEATERS)
 			{
-				//reply.printf("Average heater %d PWM: %.3f", heater, reprap.GetHeat()->GetAveragePWM(heater));
+				reply.printf("Average heater %d PWM: %.3f", heater, reprap.GetHeat()->GetAveragePWM(heater));
 			}
 		}
 		break;
@@ -2730,18 +3122,18 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 				{
 					const int port = (gb.Seen('R')) ? gb.GetIValue() : -1;
 					const int secure = (gb.Seen('T')) ? gb.GetIValue() : -1;
-					//reprap.GetNetwork()->EnableProtocol(protocol, port, secure, reply);
+					reprap.GetNetwork()->EnableProtocol(protocol, port, secure, reply);
 				}
 				else
 				{
-					//reprap.GetNetwork()->DisableProtocol(protocol, reply);
+					reprap.GetNetwork()->DisableProtocol(protocol, reply);
 				}
 				break;
 			}
 		}
 
 		// Default to reporting current protocols if P or S parameter missing
-		//reprap.GetNetwork()->ReportProtocols(reply);
+		reprap.GetNetwork()->ReportProtocols(reply);
 		break;
 
 	case 665: // Set delta configuration
@@ -3071,7 +3463,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 		{
 			return false;
 		}
-		//reprap.GetHeat()->SwitchOffAll();					// turn all heaters off because the main loop may get suspended
+		reprap.GetHeat()->SwitchOffAll();					// turn all heaters off because the main loop may get suspended
 		DisableDrives();									// all motors off
 
 		if (firmwareUpdateModuleMap == 0)					// have we worked out which modules to update?
