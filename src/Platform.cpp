@@ -1941,15 +1941,15 @@ bool Platform::Inkjet(int bitPattern)
 }
 #endif
 
-bool Platform::GCodeAvailable(const SerialSource source) const
+/*bool Platform::GCodeAvailable(const SerialSource source) const
 {
 	return false;
-}
+}*/
 
-char Platform::ReadFromSource(const SerialSource source)
+/*char Platform::ReadFromSource(const SerialSource source)
 {
 	return 0;
-}
+}*/
 
 #ifndef __RADDS__
 // CPU temperature

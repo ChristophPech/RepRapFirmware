@@ -1,4 +1,5 @@
 #pragma once
+
 #include <cmath>
 #include <algorithm>
 #include <iostream>
@@ -95,6 +96,7 @@ static const T& constrain(const T& x, const T& a, const T& b) {if (x < a) {retur
 static float fsquare(float f) { return f*f; }
 static int64_t isquare64(int64_t i) { return i*i; };
 #define ARRAY_SIZE( array ) ( sizeof( array ) / sizeof( array[0] ))
+#define ARRAY_UPB(_x)	(ARRAY_SIZE(_x) - 1)
 char *strptime(const char * a, const char * b, struct tm * c);
 
 #define pre(x)
@@ -130,4 +132,30 @@ const Pin ExpansionStart = 200;					// Pin numbers at/above this are on the I/O 
 
 static int END_STOP_PINS[DRIVES];
 static int POT_WIPES[8];
+
+class Stream {
+public:
+	virtual int available() { return 0; };
+	virtual char read() { return 0; };
+};
+
+class SimStream : public Stream {
+public:
+	const char* m_pcCurCG = NULL;
+	int m_iCurCG = 0;
+
+	int available() { 
+		if (m_pcCurCG&&m_iCurCG < strlen(m_pcCurCG)) { return strlen(m_pcCurCG) - m_iCurCG; }
+		return 0; 
+	};
+
+	char read() { return m_pcCurCG[m_iCurCG++]; };
+
+	void Set(const char* data) { m_pcCurCG = data; m_iCurCG = 0; }
+};
+
+
+static Stream Serial;
+extern SimStream SerialUSB;
+//static SimStream SerialUSB;
 

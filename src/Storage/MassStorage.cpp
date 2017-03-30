@@ -1,7 +1,7 @@
 #include "MassStorage.h"
 #include "Platform.h"
 #include "RepRap.h"
-#include "sd_mmc.h"
+//#include "sd_mmc.h"
 
 // Static helper functions - not declared as class members to avoid having to include sd_mmc.h everywhere
 static const char* TranslateCardType(card_type_t ct)

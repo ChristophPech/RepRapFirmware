@@ -72,34 +72,11 @@ void SpinAll() {
 	SleepEx(1, true);
 }
 
-const char* gCurCG = NULL;
-int iCurCG = 0;
-bool Webserver::GCodeAvailable(const WebSource source) const
-{
-	switch (source)
-	{
-	case WebSource::Telnet:
-		if (gCurCG&&iCurCG < strlen(gCurCG)) return true;
-	}
-	return false;
-}
-
-char Webserver::ReadGCode(const WebSource source)
-{
-	switch (source)
-	{
-	case WebSource::Telnet:
-		return gCurCG[iCurCG++];
-	}
-
-	return 0;
-}
-
+SimStream SerialUSB;
 
 void RunGCode(const char* gcode)
 {
-	gCurCG = gcode;
-	iCurCG = 0;
+	SerialUSB.Set(gcode);
 
 	SpinAll();
 }
