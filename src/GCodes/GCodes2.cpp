@@ -2746,7 +2746,10 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 				{
 					platform->GetEndStopConfiguration(axis, config, logic);
 					reply.catf(" %c %s (active %s),", axisLetters[axis],
-							(config == EndStopType::highEndStop) ? "high end" : (config == EndStopType::lowEndStop) ? "low end" : "none",
+							(config == EndStopType::highEndStop) ? "high end" :
+							(config == EndStopType::lowEndStop) ? "low end" :
+							(config == EndStopType::lowStallGuard) ? "low stall" :
+							(config == EndStopType::highStallGuard) ? "high stall" : "none",
 							(config == EndStopType::noEndStop) ? "" : (logic) ? "high" : "low");
 				}
 			}
@@ -3383,9 +3386,11 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, StringRef& reply)
 		{
 			if (gb.Seen(axisLetters[axis]))
 			{
-				memset(platform->driveStallGuardLog, 0, sizeof(platform->driveStallGuardLog));
+				memset(platform->driveStallGuardLog, 0xFF, sizeof(platform->driveStallGuardLog));
 				platform->driveStallGuardLogDriver=axis;
 				platform->driveStallGuardLogPos = 0;
+
+				reply.catf("StepGuard %c %d", axisLetters[axis],platform->driveStallGuardLogDriver);
 			}
 		}
 	}

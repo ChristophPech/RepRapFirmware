@@ -147,7 +147,9 @@ enum class EndStopType
 {
 	noEndStop = 0,
 	lowEndStop = 1,
-	highEndStop = 2
+	highEndStop = 2,
+	lowStallGuard = 3,
+	highStallGuard = 4
 };
 
 /***************************************************************************************************/
@@ -402,8 +404,8 @@ public:
 	void DisableDrive(size_t drive);
 	void SetDriversIdle();
 	void SetMotorCurrent(size_t drive, float current, bool isPercent);
-	uint32_t GetDriverStallGuard(size_t driver);
-	uint32_t GetMotorStallGuard(size_t drive);
+	uint32_t GetDriverStallGuard(size_t driver) const;
+	uint32_t GetMotorStallGuard(size_t drive) const;
 	float GetMotorCurrent(size_t drive, bool isPercent) const;
 	void SetIdleCurrentFactor(float f);
 	float GetIdleCurrentFactor() const
@@ -590,7 +592,7 @@ public:
 	bool GetFirmwarePin(int logicalPin, PinAccess access, Pin& firmwarePin, bool& invert);
 
 //#ifdef DUET_NG
-	uint16_t driveStallGuardLog[1024] = {0};
+	uint16_t driveStallGuardLog[1024*2] = {0};
 	uint32_t driveStallGuardLogPos = 0;
 	uint16_t driveStallGuardLogDriver = -1;
 //#endif

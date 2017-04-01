@@ -1320,8 +1320,13 @@ bool DDA::Step()
 		if (platform->driveStallGuardLogDriver != -1) {
 			size_t iCnt=ARRAY_SIZE(platform->driveStallGuardLog);
 			uint16_t val=(uint16_t)platform->GetMotorStallGuard(platform->driveStallGuardLogDriver);
-			platform->driveStallGuardLog[platform->driveStallGuardLogPos%iCnt] = val;
-			platform->driveStallGuardLogPos++;
+			platform->driveStallGuardLogPos%=iCnt;
+
+			if(platform->driveStallGuardLogPos==0||platform->driveStallGuardLog[platform->driveStallGuardLogPos-1]!=val)
+			{
+				platform->driveStallGuardLog[platform->driveStallGuardLogPos] = val;
+				platform->driveStallGuardLogPos++;
+			}
 		}
 
 		// 6. Check for move completed

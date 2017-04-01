@@ -1877,6 +1877,12 @@ EndStopHit Platform::Stopped(size_t drive) const
 				return EndStopHit::highHit;
 			}
 		}
+		else if (endStopType[drive] == EndStopType::lowStallGuard || endStopType[drive] == EndStopType::highStallGuard)
+		{
+			uint32_t val=GetMotorStallGuard(drive);
+			if(val>0) {return EndStopHit::noStop;}
+			return endStopType[drive] == EndStopType::lowStallGuard ? EndStopHit::lowHit:EndStopHit::highHit;
+		}
 		else if (endStopType[drive] == EndStopType::noEndStop)
 		{
 			// No homing switch is configured for this axis, so see if we should use the Z probe
@@ -2081,7 +2087,7 @@ void Platform::SetMotorCurrent(size_t drive, float currentOrPercent, bool isPerc
 	}
 }
 
-uint32_t Platform::GetDriverStallGuard(size_t driver)
+uint32_t Platform::GetDriverStallGuard(size_t driver) const
 {
 #if defined(DUET_NG)
 	if (driver < numTMC2660Drivers)
@@ -2089,10 +2095,10 @@ uint32_t Platform::GetDriverStallGuard(size_t driver)
 		return TMC2660::GetStallGuard(driver);
 	}
 #endif
-	return 0;
+	return 0xFFFFFFFF;
 }
 
-uint32_t Platform::GetMotorStallGuard(size_t drive)
+uint32_t Platform::GetMotorStallGuard(size_t drive) const
 {
 	const size_t numAxes = reprap.GetGCodes()->GetNumAxes();
 	if (drive < numAxes)
@@ -2108,7 +2114,7 @@ uint32_t Platform::GetMotorStallGuard(size_t drive)
 		return GetDriverStallGuard(extruderDrivers[drive - numAxes]);
 	}
 
-	return 0;
+	return 0xFFFFFFFF;
 }
 
 // This must not be called from an ISR, or with interrupts disabled.

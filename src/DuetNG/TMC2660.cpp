@@ -27,7 +27,7 @@ const Pin DriversSclkPin = 23;								// PA23
 #define TMC_CLOCK_ID		ID_TC1							// this is channel 1 on TC0
 
 const uint32_t DriversSpiClockFrequency = 4000000;			// 4MHz SPI clock
-const int StallGuardThreshold = 1;							// Range is -64..63. Zero seems to be too sensitive. Higher values reduce sensitivity of stall detection.
+const int StallGuardThreshold = 3;							// Range is -64..63. Zero seems to be too sensitive. Higher values reduce sensitivity of stall detection.
 
 // TMC2660 registers
 const uint32_t TMC_REG_DRVCTRL = 0;
@@ -371,7 +371,7 @@ namespace TMC2660
 
 	uint32_t GetStallGuard(size_t drive)
 	{
-		return (drive < numTmc2660Drivers) ? driverStates[drive].ReadStallGuard() : 0;
+		return (drive < numTmc2660Drivers) ? driverStates[drive].ReadStallGuard() : -1;
 	}
 
 	bool SetMicrostepping(size_t drive, int microsteps, int mode)
