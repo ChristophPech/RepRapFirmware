@@ -251,8 +251,16 @@ bool DDA::Init(const GCodes::RawMove &nextMove, bool doMotorMapping)
 		}
 		else
 		{
-			directionVector[drive] = (float)delta/reprap.GetPlatform()->DriveStepsPerUnit(drive);
-			dm.state = (delta != 0) ? DMState::moving : DMState::idle;
+			const float stepsPerMm = reprap.GetPlatform()->DriveStepsPerUnit(drive);
+			if (delta != 0 && stepsPerMm > 0)
+			{
+				dm.state = DMState::moving;
+				directionVector[drive] = (float)delta / stepsPerMm;
+			}
+			else
+			{
+				dm.state = DMState::idle;
+			}
 		}
 
 		if (dm.state == DMState::moving)
