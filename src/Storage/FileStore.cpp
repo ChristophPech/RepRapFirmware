@@ -280,7 +280,7 @@ bool FileStore::Write(const char *s, size_t len)
 	size_t bytesWritten;
 	uint32_t time = micros();
 
-	FRESULT writeStatus = f_write(&file, s, len, &bytesWritten);
+	FRESULT writeStatus = f_write(&file, s, len, (UINT*)&bytesWritten);
 	time = micros() - time;
 	if (time > longestWriteTime)
 	{
